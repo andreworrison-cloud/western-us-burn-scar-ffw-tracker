@@ -1,0 +1,63 @@
+name: Update IEM Burn-Scar FFW Data
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: Rebuild the full archive from November 2005
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: iem-data-main
+  cancel-in-progress: false
+
+jobs:
+  sync-iem-vtec:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install the shapefile reader
+        run: python -m pip install -r requirements.txt
+      - name: Read the IEM warning archive
+        env:
+          FULL_BACKFILL: ${{ inputs.backfill || false }}
+        run: |
+          if [[ "$FULL_BACKFILL" == "true" ]]; then
+            python scripts/fetch_iem_burn_scar_ffw.py --backfill
+          else
+            python scripts/fetch_iem_burn_scar_ffw.py --lookback-days 7
+          fi
+      - name: Commit archive and last successful check
+        id: commit
+        run: |
+          git add -- data/wfo_summary.json data/burn_scar_polygons.geojson data/metadata.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Update IEM warning archive ($(date -u +'%F %R UTC'))"
+          git push origin HEAD:main
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      - name: Rebuild Pages from the main branch
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" --silent

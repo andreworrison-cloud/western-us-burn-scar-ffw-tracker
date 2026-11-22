@@ -1,0 +1,20 @@
+name: Start the initial IEM archive backfill
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/launch-archive.yml
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch the full archive refresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run update-iem-data.yml --repo "$GITHUB_REPOSITORY" --ref main -f backfill=true

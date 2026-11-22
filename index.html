@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#10171c" />
+    <meta
+      name="description"
+      content="Explore western U.S. burn-scar flash flood warnings by forecast office, season and year, with original NWS warning polygons and active alerts."
+    />
+    <title>Burn Scar Tracker | Western U.S. flash flood warnings</title>
+    <link rel="icon" href="./assets/mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./vendor/leaflet/leaflet.js"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <symbol id="i-map" viewBox="0 0 24 24">
+        <path d="m3 5 6-2 6 3 6-2v15l-6 2-6-3-6 2zM9 3v15m6-12v15" />
+      </symbol>
+      <symbol id="i-radio" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="1.6" />
+        <path
+          d="M8 8a5.7 5.7 0 0 0 0 8m8-8a5.7 5.7 0 0 1 0 8M5 4.8a10 10 0 0 0 0 14.4m14-14.4a10 10 0 0 1 0 14.4"
+        />
+      </symbol>
+      <symbol id="i-stack" viewBox="0 0 24 24">
+        <path d="m3 8 9-5 9 5-9 5zM3 12l9 5 9-5M3 16l9 5 9-5" />
+      </symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24">
+        <rect x="3.5" y="5" width="17" height="16" rx="2" />
+        <path d="M7.5 3v5m9-5v5M4 11h16m-12 4h3m2 0h3" />
+      </symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24">
+        <path d="M19 9c0 5.2-7 12-7 12S5 14.2 5 9a7 7 0 0 1 14 0z" />
+        <circle cx="12" cy="9" r="2.2" />
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 11v5m0-8v.3" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6" />
+        <path d="m15 15 5 5" />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 3v11m-4-4 4 4 4-4M4 15v5h16v-5" />
+      </symbol>
+      <symbol id="i-table" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 9h18M9 9v11m-6-6h18" />
+      </symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </symbol>
+      <symbol id="i-list" viewBox="0 0 24 24">
+        <path d="M9 6h12M9 12h12M9 18h12M3 6h1m-1 6h1m-1 6h1" />
+      </symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24">
+        <path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5" />
+      </symbol>
+      <symbol id="i-sort" viewBox="0 0 24 24">
+        <path d="m7 10 5-5 5 5m-10 4 5 5 5-5" />
+      </symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24">
+        <path d="m7 10 5 5 5-5" />
+      </symbol>
+      <symbol id="i-link" viewBox="0 0 24 24">
+        <path d="M13 4h7v7m0-7L10 14M9 5H4v15h15v-5" />
+      </symbol>
+      <symbol id="i-close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12M18 6 6 18" />
+      </symbol>
+    </svg>
+    <a class="skip" href="#main">Skip to dashboard</a>
+    <header class="topbar">
+      <div class="top-inner">
+        <a class="brand" href="./"
+          ><img src="./assets/mark.svg" width="32" height="32" alt="" />Burn
+          Scar Tracker</a
+        >
+        <nav aria-label="Primary">
+          <a class="nav-current" href="#main">Dashboard</a
+          ><button id="method-open" type="button">Methodology</button>
+        </nav>
+        <a
+          class="source-link"
+          href="https://mesonet.agron.iastate.edu/vtec/"
+          target="_blank"
+          rel="noopener"
+          >IEM archive <svg class="icon"><use href="#i-link" /></svg
+        ></a>
+      </div>
+    </header>
+    <main id="main" class="shell">
+      <section class="intro">
+        <div>
+          <p class="eyebrow"><span></span>Western United States</p>
+          <h1>Burn-scar flash flood warnings</h1>
+          <p class="lead">
+            Track current warnings and explore the NWS issuance archive across
+            33 forecast offices.
+          </p>
+        </div>
+        <div class="stamp">
+          <svg class="icon"><use href="#i-clock" /></svg>
+          <div>
+            <span>Archive checked</span
+            ><time id="last-sync-badge">Loading…</time>
+          </div>
+        </div>
+      </section>
+      <section class="metrics" aria-label="Tracker totals">
+        <article>
+          <div class="metric-label">
+            <svg class="icon"><use href="#i-stack" /></svg>Verified warnings
+          </div>
+          <strong id="stat-total" class="amber">—</strong
+          ><small>Unique initial issuances</small>
+        </article>
+        <article>
+          <div class="metric-label">
+            <svg class="icon"><use href="#i-pin" /></svg>Forecast offices
+          </div>
+          <strong id="stat-offices">33</strong
+          ><small>Western U.S. coverage</small>
+        </article>
+        <article>
+          <div class="metric-label">
+            <svg class="icon"><use href="#i-calendar" /></svg>Archive period
+          </div>
+          <strong id="stat-range" class="range">—</strong
+          ><small id="period-sub">From November 2005</small>
+        </article>
+        <article>
+          <div class="metric-label">
+            <svg class="icon"><use href="#i-radio" /></svg>Active warnings
+          </div>
+          <strong id="stat-active">—</strong
+          ><small id="active-status" role="status">Checking NWS…</small>
+        </article>
+      </section>
+      <p id="archive-error" class="notice" role="status" hidden></p>
+      <div class="workspace-grid">
+        <section class="panel map-panel" aria-labelledby="map-heading">
+          <div class="panel-header">
+            <div class="heading-wrap">
+              <span class="section-icon"
+                ><svg class="icon"><use href="#i-map" /></svg
+              ></span>
+              <h2 id="map-heading">Warning map</h2>
+            </div>
+            <div class="map-actions">
+              <label class="select-wrap"
+                ><span class="visually-hidden">Basemap</span
+                ><select id="basemap">
+                  <option value="dark">Dark gray</option>
+                  <option value="topo">World topo</option>
+                  <option value="imagery">Satellite</option>
+                  <option value="osm">OpenStreetMap</option></select
+                ><svg class="icon"><use href="#i-chevron" /></svg
+              ></label>
+              <button
+                type="button"
+                class="icon-btn"
+                id="map-reset"
+                title="Reset to western U.S. extent"
+                aria-label="Reset to western U.S. extent"
+              >
+                <svg class="icon"><use href="#i-expand" /></svg>
+              </button>
+            </div>
+          </div>
+          <div
+            id="map"
+            aria-label="Interactive map of forecast offices and warning polygons"
+          >
+            <noscript>Enable JavaScript to view the interactive map.</noscript>
+          </div>
+          <div class="map-legend" aria-label="Map layers">
+            <label
+              ><input id="toggle-archive" type="checkbox" checked /><i
+                class="key archived"
+              ></i
+              >Archived warning</label
+            ><label
+              ><input id="toggle-offices" type="checkbox" checked /><i
+                class="key office"
+              ></i
+              >WFO</label
+            ><label
+              ><input id="toggle-active" type="checkbox" checked /><i
+                class="key active"
+              ></i
+              >Active warning</label
+            >
+          </div>
+          <div class="map-note">
+            <span id="mapped-count">Loading polygons…</span
+            ><button type="button" class="text-btn" id="coverage-info">
+              Coverage notes
+            </button>
+          </div>
+        </section>
+        <section class="panel analysis" aria-labelledby="analytics-heading">
+          <div id="active-banner" class="alert-banner" hidden></div>
+          <div class="panel-header">
+            <div class="heading-wrap">
+              <span class="section-icon"
+                ><svg class="icon"><use href="#i-table" /></svg
+              ></span>
+              <h2 id="analytics-heading">Warning analytics</h2>
+            </div>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Analysis views">
+            <button
+              id="tab-wfo"
+              role="tab"
+              aria-selected="true"
+              aria-controls="panel-wfo"
+              data-view="wfo"
+            >
+              WFO breakdown
+            </button>
+            <button
+              id="tab-heat"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-heat"
+              tabindex="-1"
+              data-view="heat"
+            >
+              Heatmap
+            </button>
+            <button
+              id="tab-recent"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-recent"
+              tabindex="-1"
+              data-view="recent"
+            >
+              Recent events
+            </button>
+          </div>
+          <div
+            class="tab-panel"
+            role="tabpanel"
+            id="panel-wfo"
+            aria-labelledby="tab-wfo"
+          >
+            <label class="search"
+              ><svg class="icon"><use href="#i-search" /></svg
+              ><input
+                id="search"
+                type="search"
+                placeholder="Search office, state or burn scar"
+                aria-label="Search offices by code, city, state or burn scar"
+            /></label>
+            <div class="table-scroll">
+              <table class="offices">
+                <caption class="visually-hidden">
+                  Verified flash flood warnings by issuing office
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <button data-sort="wfo">
+                        Office <svg class="icon"><use href="#i-sort" /></svg>
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button data-sort="state">
+                        State <svg class="icon"><use href="#i-sort" /></svg>
+                      </button>
+                    </th>
+                    <th scope="col" aria-sort="descending">
+                      <button data-sort="total_ffw">
+                        FFWs <svg class="icon"><use href="#i-sort" /></svg>
+                      </button>
+                    </th>
+                    <th scope="col">
+                      <button data-sort="peak_season">
+                        Peak season
+                        <svg class="icon"><use href="#i-sort" /></svg>
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="office-rows"></tbody>
+              </table>
+              <p id="no-offices" class="empty" hidden>
+                No offices match this search.
+              </p>
+            </div>
+            <div class="drawer-footer">
+              <span id="office-count" role="status">Loading offices…</span>
+              <div class="export">
+                <button id="export-csv" class="small-btn" disabled>
+                  <svg class="icon"><use href="#i-download" /></svg>CSV</button
+                ><button id="export-geo" class="small-btn" disabled>
+                  <svg class="icon"><use href="#i-download" /></svg>GeoJSON
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
+            class="tab-panel"
+            role="tabpanel"
+            id="panel-heat"
+            aria-labelledby="tab-heat"
+            hidden
+          >
+            <div class="heat-options">
+              <div class="switch" aria-label="Heatmap period">
+                <button type="button" id="heat-month" aria-pressed="true">
+                  Monthly</button
+                ><button type="button" id="heat-year" aria-pressed="false">
+                  Annual
+                </button>
+              </div>
+              <span id="heat-unit">Warnings</span>
+            </div>
+            <div class="table-scroll heat-scroll" id="heat-table"></div>
+            <div class="drawer-footer heat-footer">
+              <span id="heat-caption"></span
+              ><span class="heat-ramp">Low <i></i> High</span>
+            </div>
+          </div>
+          <div
+            class="tab-panel"
+            role="tabpanel"
+            id="panel-recent"
+            aria-labelledby="tab-recent"
+            hidden
+          >
+            <div class="feed-scroll" id="recent-feed"></div>
+            <div class="drawer-footer">
+              <span id="feed-count"></span
+              ><button class="small-btn" type="button" id="feed-more">
+                Show more
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+      <footer>
+        <div>
+          <svg class="icon"><use href="#i-info" /></svg
+          ><span
+            >Archive: Iowa Environmental Mesonet <b>·</b> Active alerts:
+            National Weather Service</span
+          >
+        </div>
+        <a href="https://www.weather.gov/alerts" target="_blank" rel="noopener"
+          >Official NWS alerts <svg class="icon"><use href="#i-link" /></svg
+        ></a>
+      </footer>
+    </main>
+    <dialog id="method-dialog" aria-labelledby="method-title">
+      <div class="dialog-top">
+        <p class="eyebrow"><span></span>Archive guide</p>
+        <button
+          id="method-close"
+          class="icon-btn"
+          aria-label="Close methodology"
+        >
+          <svg class="icon"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <h2 id="method-title">Methodology &amp; coverage</h2>
+      <h3>What counts as a warning?</h3>
+      <p>
+        Each initial operational FF.W warning counts once per issuing office,
+        VTEC year and event number. The original warning segment must explicitly
+        link the threat to burned terrain. The screen excludes follow-up
+        issuances, dam or levee failures and generic safety advice. Each event
+        links to its IEM warning record.
+      </p>
+      <h3>What does the map show?</h3>
+      <p>
+        Amber shapes show the initial NWS warning footprint. A burn-scar
+        perimeter may cover a different area. If the initial IEM polygon is
+        unavailable, the tracker uses coordinates printed in that warning. A
+        text-verified warning with no usable shape still contributes to its
+        office total.
+      </p>
+      <h3>How far back can I compare offices?</h3>
+      <p>
+        The search begins November 1, 2005. Some early warnings mention burned
+        areas but lack an operational NEW tag. Storm-based warnings became
+        official October 1, 2007. Early counts and comparisons over time reflect
+        changes in tagging, coverage and warning language.
+      </p>
+      <h3>How are seasons and names assigned?</h3>
+      <p>
+        Peak season is the three consecutive calendar months with the most
+        archived warnings for an office. Ties share the peak. This describes
+        issuance timing. Monthly cells sum all archive years; annual cells start
+        in 2015 and the current year is partial. Burn names come from the
+        warning text and some remain unspecified.
+      </p>
+      <h3>How current is the tracker?</h3>
+      <p>
+        The scheduled archive job checks the previous seven days every 30
+        minutes. Active NWS alerts are checked every two minutes while the page
+        is open. The live indicator shows the last successful check or an
+        unavailable status.
+      </p>
+      <p class="source-list">
+        <a
+          href="https://mesonet.agron.iastate.edu/request/gis/watchwarn.phtml"
+          target="_blank"
+          rel="noopener"
+          >IEM warning GIS</a
+        ><a
+          href="https://mesonet.agron.iastate.edu/wx/afos/"
+          target="_blank"
+          rel="noopener"
+          >IEM text archive</a
+        ><a
+          href="https://www.weather.gov/documentation/services-web-api"
+          target="_blank"
+          rel="noopener"
+          >NWS alerts API</a
+        >
+      </p>
+    </dialog>
+  </body>
+</html>

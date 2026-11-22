@@ -1,0 +1,233 @@
+{
+  "ABQ": {
+    "name": "Albuquerque, NM",
+    "state": "NM",
+    "region": "Southwest Monsoon",
+    "lat": 35.04,
+    "lon": -106.62
+  },
+  "FGZ": {
+    "name": "Flagstaff, AZ",
+    "state": "AZ",
+    "region": "Southwest Monsoon",
+    "lat": 35.23,
+    "lon": -111.82
+  },
+  "PSR": {
+    "name": "Phoenix, AZ",
+    "state": "AZ",
+    "region": "Southwest Monsoon",
+    "lat": 33.45,
+    "lon": -111.95
+  },
+  "TWC": {
+    "name": "Tucson, AZ",
+    "state": "AZ",
+    "region": "Southwest Monsoon",
+    "lat": 32.23,
+    "lon": -110.95
+  },
+  "EPZ": {
+    "name": "El Paso / Santa Teresa, NM",
+    "state": "NM",
+    "region": "Southwest Monsoon",
+    "lat": 31.87,
+    "lon": -106.7
+  },
+  "BOU": {
+    "name": "Denver / Boulder, CO",
+    "state": "CO",
+    "region": "Southern & Central Rockies",
+    "lat": 39.99,
+    "lon": -105.26
+  },
+  "PUB": {
+    "name": "Pueblo, CO",
+    "state": "CO",
+    "region": "Southern & Central Rockies",
+    "lat": 38.28,
+    "lon": -104.52
+  },
+  "GJT": {
+    "name": "Grand Junction, CO",
+    "state": "CO",
+    "region": "Southern & Central Rockies",
+    "lat": 39.12,
+    "lon": -108.53
+  },
+  "SLC": {
+    "name": "Salt Lake City, UT",
+    "state": "UT",
+    "region": "Southern & Central Rockies",
+    "lat": 40.77,
+    "lon": -111.96
+  },
+  "RIW": {
+    "name": "Riverton, WY",
+    "state": "WY",
+    "region": "Southern & Central Rockies",
+    "lat": 43.06,
+    "lon": -108.48
+  },
+  "CYS": {
+    "name": "Cheyenne, WY",
+    "state": "WY",
+    "region": "Southern & Central Rockies",
+    "lat": 41.15,
+    "lon": -104.81
+  },
+  "BYZ": {
+    "name": "Billings, MT",
+    "state": "MT",
+    "region": "Southern & Central Rockies",
+    "lat": 45.75,
+    "lon": -108.57
+  },
+  "MSO": {
+    "name": "Missoula, MT",
+    "state": "MT",
+    "region": "Southern & Central Rockies",
+    "lat": 46.92,
+    "lon": -114.09
+  },
+  "TFX": {
+    "name": "Great Falls, MT",
+    "state": "MT",
+    "region": "Southern & Central Rockies",
+    "lat": 47.46,
+    "lon": -111.38
+  },
+  "GGW": {
+    "name": "Glasgow, MT",
+    "state": "MT",
+    "region": "Southern & Central Rockies",
+    "lat": 48.21,
+    "lon": -106.62
+  },
+  "LOX": {
+    "name": "Los Angeles / Oxnard, CA",
+    "state": "CA",
+    "region": "California & Great Basin",
+    "lat": 34.2,
+    "lon": -119.2
+  },
+  "SGX": {
+    "name": "San Diego, CA",
+    "state": "CA",
+    "region": "California & Great Basin",
+    "lat": 33.02,
+    "lon": -117.09
+  },
+  "MTR": {
+    "name": "San Francisco Bay Area, CA",
+    "state": "CA",
+    "region": "California & Great Basin",
+    "lat": 36.59,
+    "lon": -121.86
+  },
+  "STO": {
+    "name": "Sacramento, CA",
+    "state": "CA",
+    "region": "California & Great Basin",
+    "lat": 38.55,
+    "lon": -121.42
+  },
+  "HNX": {
+    "name": "San Joaquin Valley / Hanford, CA",
+    "state": "CA",
+    "region": "California & Great Basin",
+    "lat": 36.31,
+    "lon": -119.63
+  },
+  "EKA": {
+    "name": "Eureka, CA",
+    "state": "CA",
+    "region": "California & Great Basin",
+    "lat": 40.8,
+    "lon": -124.16
+  },
+  "VEF": {
+    "name": "Las Vegas, NV",
+    "state": "NV",
+    "region": "California & Great Basin",
+    "lat": 36.05,
+    "lon": -115.18
+  },
+  "REV": {
+    "name": "Reno, NV",
+    "state": "NV",
+    "region": "California & Great Basin",
+    "lat": 39.57,
+    "lon": -119.8
+  },
+  "LKN": {
+    "name": "Elko, NV",
+    "state": "NV",
+    "region": "California & Great Basin",
+    "lat": 40.87,
+    "lon": -115.74
+  },
+  "SEW": {
+    "name": "Seattle, WA",
+    "state": "WA",
+    "region": "Pacific Northwest",
+    "lat": 47.69,
+    "lon": -122.26
+  },
+  "OTX": {
+    "name": "Spokane, WA",
+    "state": "WA",
+    "region": "Pacific Northwest",
+    "lat": 47.68,
+    "lon": -117.63
+  },
+  "PQR": {
+    "name": "Portland, OR",
+    "state": "OR",
+    "region": "Pacific Northwest",
+    "lat": 45.56,
+    "lon": -122.54
+  },
+  "MFR": {
+    "name": "Medford, OR",
+    "state": "OR",
+    "region": "Pacific Northwest",
+    "lat": 42.37,
+    "lon": -122.87
+  },
+  "PDT": {
+    "name": "Pendleton, OR",
+    "state": "OR",
+    "region": "Pacific Northwest",
+    "lat": 45.69,
+    "lon": -118.85
+  },
+  "BOI": {
+    "name": "Boise, ID",
+    "state": "ID",
+    "region": "Pacific Northwest",
+    "lat": 43.56,
+    "lon": -116.21
+  },
+  "PIH": {
+    "name": "Pocatello, ID",
+    "state": "ID",
+    "region": "Pacific Northwest",
+    "lat": 42.91,
+    "lon": -112.59
+  },
+  "MAF": {
+    "name": "Midland / Odessa, TX",
+    "state": "TX",
+    "region": "Southwest Monsoon",
+    "lat": 31.94,
+    "lon": -102.19
+  },
+  "LBF": {
+    "name": "North Platte, NE",
+    "state": "NE",
+    "region": "Southern & Central Rockies",
+    "lat": 41.13,
+    "lon": -100.68
+  }
+}
