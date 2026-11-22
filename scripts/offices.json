@@ -2,35 +2,35 @@
   "ABQ": {
     "name": "Albuquerque, NM",
     "state": "NM",
-    "region": "Southwest Monsoon",
+    "region": "Southwest",
     "lat": 35.04,
     "lon": -106.62
   },
   "FGZ": {
     "name": "Flagstaff, AZ",
     "state": "AZ",
-    "region": "Southwest Monsoon",
+    "region": "Southwest",
     "lat": 35.23,
     "lon": -111.82
   },
   "PSR": {
     "name": "Phoenix, AZ",
     "state": "AZ",
-    "region": "Southwest Monsoon",
+    "region": "Southwest",
     "lat": 33.45,
     "lon": -111.95
   },
   "TWC": {
     "name": "Tucson, AZ",
     "state": "AZ",
-    "region": "Southwest Monsoon",
+    "region": "Southwest",
     "lat": 32.23,
     "lon": -110.95
   },
   "EPZ": {
     "name": "El Paso / Santa Teresa, NM",
     "state": "NM",
-    "region": "Southwest Monsoon",
+    "region": "Southwest",
     "lat": 31.87,
     "lon": -106.7
   },
@@ -219,7 +219,7 @@
   "MAF": {
     "name": "Midland / Odessa, TX",
     "state": "TX",
-    "region": "Southwest Monsoon",
+    "region": "Southwest",
     "lat": 31.94,
     "lon": -102.19
   },

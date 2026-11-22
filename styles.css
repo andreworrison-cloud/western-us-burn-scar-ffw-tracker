@@ -327,6 +327,42 @@ h1 span {
 .region-count:empty {
   display: none;
 }
+.filter-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin-top: 8px;
+}
+.weather-select,
+.color-setting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+  color: #c3d5e8;
+}
+.weather-select {
+  font-weight: 650;
+}
+.weather-select select,
+.color-setting select {
+  max-width: 100%;
+  min-height: 28px;
+  padding: 3px 6px;
+  font: inherit;
+  color: #d6f3ff;
+  background: #102237;
+  border: 1px solid #48657f;
+  border-radius: 5px;
+}
+#weather-source {
+  color: var(--muted);
+  font-size: 0.69rem;
+}
+.filter-tools .query-line {
+  margin: 0;
+}
 .query-line {
   display: flex;
   flex-wrap: wrap;
@@ -666,6 +702,39 @@ input[type="checkbox"] {
   background: color-mix(in srgb, var(--swatch) 27%, transparent);
   border-radius: 2px;
 }
+.color-setting {
+  border-top: 1px solid #2f4158;
+  padding-top: 6px;
+  margin-top: 6px;
+  font-size: 0.67rem;
+}
+.color-setting select {
+  min-height: 23px;
+}
+.weather-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  max-width: 430px;
+  margin-top: 5px;
+}
+.weather-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #d3dfef;
+  font-size: 0.65rem;
+}
+.weather-key i {
+  width: 12px;
+  height: 8px;
+  border: 1.5px solid var(--swatch);
+  background: color-mix(in srgb, var(--swatch) 38%, transparent);
+  border-radius: 2px;
+}
+.neutral-season label:not(.live-key) i {
+  --swatch: #a8bed1;
+}
 .season-layers label:has(input:not(:checked)) {
   opacity: 0.6;
   text-decoration: line-through;
@@ -804,6 +873,12 @@ input[type="checkbox"] {
 .unit-switch button[aria-pressed="true"] {
   color: #8adeff;
   background: #19384f;
+}
+.year-coverage {
+  margin: 1px 0 6px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #aec4d7;
 }
 .heat-readout {
   display: flex;
@@ -1196,6 +1271,22 @@ input[type="checkbox"] {
   margin: 5px 0 7px;
   font-size: 0.87rem;
   font-weight: 700;
+}
+.weather-evidence,
+.weather-note {
+  color: #b6cfdf;
+  font-size: 0.73rem;
+  margin: 5px 0 9px;
+}
+.weather-evidence summary {
+  color: #a3dff8;
+  cursor: pointer;
+}
+.weather-evidence blockquote {
+  margin: 5px 0;
+  padding: 1px 8px;
+  border-left: 2px solid #487d9b;
+  line-height: 1.45;
 }
 .event-map,
 .feed-meta a {

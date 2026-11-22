@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 from zipfile import BadZipFile, ZipFile
 
 import shapefile
-from burn_language import UNNAMED, analyze_segment
+from burn_language import UNNAMED, analyze_segment, warning_weather
 
 ROOT = Path(__file__).resolve().parents[1]
 OFFICES = json.loads((ROOT / "scripts/offices.json").read_text())
@@ -30,7 +30,7 @@ NEW = re.compile(
 DAM = re.compile(r"/[A-Z0-9]{5}\.[A-Z0-9]\.DM\.\d{6}T\d{4}Z\.")
 PIL = re.compile(r"(FFW[A-Z]{3})_(\d{12})(?:[^/]*)\.txt$")
 MONTHS = list(calendar.month_abbr)[1:]
-RULE_VERSION = 1
+RULE_VERSION = 2
 
 
 def utc(value):
@@ -261,6 +261,7 @@ def parse_archives(texts, polygons):
                     ]
                     if any(p["HV_CAUSE"] == "DM" for p, _ in candidates):
                         continue
+                    weather = warning_weather(segment)
                     geom = merged_geometry(g for _, g in candidates)
                     source = "IEM storm-based GIS"
                     if not geom:
@@ -270,6 +271,8 @@ def parse_archives(texts, polygons):
                         stored = events[uid]
                         stored["geometry"] = merged_geometry([stored["geometry"], geom])
                         details = stored["properties"]
+                        for key, quote in weather.items():
+                            details["weather_evidence"].setdefault(key, quote)
                         details["burn_scars"] = list(
                             dict.fromkeys(details["burn_scars"] + names)
                         )
@@ -296,6 +299,7 @@ def parse_archives(texts, polygons):
                         "burn_scars": names,
                         "vtec_code": tag[0],
                         "text_excerpt": excerpt,
+                        "weather_evidence": weather,
                         "geometry_source": source,
                         "vtec_url": f"https://mesonet.agron.iastate.edu/vtec/?year={year}&wfo=K{office}&phenomena=FF&significance=W&eventid={serial:04d}",
                     }
@@ -354,7 +358,7 @@ def save_archive(features, end, out, mode, previous):
         key=lambda f: (f["properties"]["issued_utc"], f["properties"]["event_uid"]),
         reverse=True,
     )
-    years = list(range(2015, end.year + 1))
+    years = list(range(START.year, end.year + 1))
     geo = {"type": "FeatureCollection", "features": ordered}
     rows = aggregate(ordered, end.year)
     assert sum(r["total_ffw"] for r in rows) == len(ordered)

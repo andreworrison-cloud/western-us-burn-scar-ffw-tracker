@@ -3,8 +3,8 @@ export const regions = [
   {
     id: "southwest",
     offices: "ABQ FGZ PSR TWC EPZ MAF".split(" "),
-    name: "Southwest Monsoon",
-    short: "Southwest Monsoon",
+    name: "Southwest",
+    short: "Southwest",
     states: "AZ, NM and Midland/Odessa, TX",
   },
   {
@@ -59,6 +59,73 @@ export const tiers = [
 ];
 export const tierFor = (count) => tiers.find((t) => count >= t.min);
 
+// A warning can explicitly describe several meteorological processes.
+export const weatherTypes = {
+  thunderstorm: { label: "Thunderstorms / convection", color: "#ffb640" },
+  monsoon: { label: "Monsoon", color: "#f276d5" },
+  ar: { label: "Atmospheric river", color: "#35d5e3" },
+  front: { label: "Front / frontal band", color: "#70a6ff" },
+  rainband: { label: "Rainbands", color: "#91db83" },
+  tropical: { label: "Tropical cyclone / remnants", color: "#c99aff" },
+  mixed: { label: "Multiple signals", color: "#ffe28a" },
+  unspecified: { label: "No tracked setup named", color: "#a5b6c8" },
+  pending: { label: "Text review pending", color: "#777d8f" },
+};
+export function weatherClass(event) {
+  if (!event.weather_evidence) return "pending";
+  const keys = Object.keys(event.weather_evidence);
+  if (keys.length > 1) return "mixed";
+  return keys[0] || "unspecified";
+}
+export function matchesWeather(event, selection) {
+  return (
+    selection === "all" ||
+    weatherClass(event) === selection ||
+    Object.hasOwn(event.weather_evidence || {}, selection)
+  );
+}
+
+// Recompute the same office statistics as the collector for a weather subset.
+export function officeRowsForFeatures(offices, features, years, monthNames) {
+  const bins = new Map(
+    offices.map((r) => [
+      r.wfo,
+      {
+        row: { ...r, ...aggregate([], years), latest_issued_utc: null },
+        scars: new Map(),
+      },
+    ]),
+  );
+  for (const { properties: p } of features) {
+    const { row, scars } = bins.get(p.wfo);
+    row.total_ffw++;
+    row.monthly[p.month - 1]++;
+    row.yearly[p.year]++;
+    if (!row.latest_issued_utc || p.issued_utc > row.latest_issued_utc)
+      row.latest_issued_utc = p.issued_utc;
+    for (const name of p.burn_scars)
+      scars.set(name, (scars.get(name) || 0) + 1);
+  }
+  return [...bins.values()].map(({ row, scars }) => {
+    const m = row.monthly;
+    const windows = m.map((n, i) => n + m[(i + 1) % 12] + m[(i + 2) % 12]);
+    const peak = Math.max(...windows);
+    row.peak_season = peak
+      ? windows
+          .flatMap((n, i) =>
+            n === peak ? [monthNames[i] + "–" + monthNames[(i + 2) % 12]] : [],
+          )
+          .join(" / ")
+      : "—";
+    row.top_scars = [...scars]
+      .sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0))
+      .slice(0, 3)
+      .map(([name]) => name)
+      .join(", ");
+    return row;
+  });
+}
+
 export function aggregate(rows, years) {
   const monthly = Array(12).fill(0);
   const yearly = Object.fromEntries(years.map((year) => [year, 0]));
@@ -84,11 +151,7 @@ export function heatBand(count, share, asShare) {
 // require review of the warning and meteorological evidence.
 function weatherSetting(scope, season) {
   if (season === "summer") {
-    if (
-      ["all", "Southwest Monsoon", "ABQ", "FGZ", "PSR", "TWC", "EPZ"].includes(
-        scope,
-      )
-    )
+    if (["all", "Southwest", "ABQ", "FGZ", "PSR", "TWC", "EPZ"].includes(scope))
       return "Monsoon moisture can fuel short, intense thunderstorms over burn scars in the Southwest.";
     return "A slow-moving thunderstorm can concentrate intense rain over a single burned watershed.";
   }

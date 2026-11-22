@@ -218,6 +218,58 @@ def _excerpt(sentence, position):
     return excerpt
 
 
+# Search the hazard narrative of each qualifying NEW segment. Retain the
+# original wording so a forecaster can inspect each attributed term.
+WEATHER_TERMS = {
+    "monsoon": r"\bmonsoon(?:s|al)?\b",
+    "ar": r"\batmospheric[ -]+rivers?\b",
+    "front": r"\b(?:(?:cold|warm|stationary|occluded)[ -]+fronts?|frontal[ -]+(?:bands?|rainbands?|rain[ -]+bands?|boundar(?:y|ies)|passage|zones?|systems?))\b",
+    "tropical": r"\b(?:tropical[ -]+(?:storms?|cyclones?|depressions?)|hurricanes?|typhoons?)\b",
+    "thunderstorm": r"\b(?:thunder[ -]?storms?|convect(?:ion|ive[ -]+(?:storms?|cells?|bands?|rain(?:fall)?)))\b",
+    "rainband": r"\b(?:rain[ -]?bands?|bands? of (?:heavy |intense |moderate )?rain(?:fall)?)\b",
+}
+WEATHER_TERMS = {key: re.compile(term, re.I) for key, term in WEATHER_TERMS.items()}
+WEATHER_NEGATION = re.compile(
+    r"\b(?:no|without|absence of|no evidence of|no indication of|no sign of)\s+"
+    r"(?:(?:new|any|additional|organized|further|active|a|an|strong|significant)\s+){0,3}$",
+    re.I,
+)
+WEATHER_AFTER = re.compile(
+    r"^\s+(?:(?:is|are|was|were|have|has)\s+)?(?:not expected|unlikely|ruled out|watch\b|warning\b|season\b)",
+    re.I,
+)
+
+
+def warning_weather(segment):
+    body = PREP.split(segment.split("LAT...LON", 1)[0], maxsplit=1)[0]
+    evidence = {}
+    for paragraph in SEGMENTS.split(body):
+        for sentence in SENTENCES.split(" ".join(paragraph.split())):
+            sentence = sentence.strip(" *")
+            if (
+                not sentence
+                or ADVICE.search(sentence)
+                or re.search(
+                    r"\b(?:if (?:a |any |additional )?(?:thunderstorms?|convection)|in the event of|"
+                    r"during (?:the |a )?(?:summer |annual )?monsoon season)\b",
+                    sentence,
+                    re.I,
+                )
+            ):
+                continue
+            for key, pattern in WEATHER_TERMS.items():
+                if key in evidence:
+                    continue
+                for match in pattern.finditer(sentence):
+                    if WEATHER_NEGATION.search(
+                        sentence[: match.start()]
+                    ) or WEATHER_AFTER.search(sentence[match.end() :]):
+                        continue
+                    evidence[key] = _excerpt(sentence, match.start())
+                    break
+    return evidence
+
+
 def analyze_segment(segment):
     """Return named scars and a verbatim evidence excerpt, or None if unsupported.
 

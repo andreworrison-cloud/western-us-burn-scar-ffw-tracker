@@ -9,7 +9,11 @@ import {
   aggregate,
   heatBand,
   describeHeatPeriod,
-} from "./explorer.mjs?v=map3";
+  matchesWeather,
+  officeRowsForFeatures,
+  weatherClass,
+  weatherTypes,
+} from "./explorer.mjs?v=weather4";
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
@@ -51,6 +55,10 @@ const state = {
   region: "all",
   basemap: "dark",
   view: "wfo",
+  weather: "all",
+  color: "season",
+  filteredRows: [],
+  filteredFeatures: [],
   scopeRows: [],
   scopeFeatures: [],
   limit: 16,
@@ -419,6 +427,61 @@ function renderOfficeLabels() {
       .addTo(labelGroup);
   }
 }
+function weatherDetails(event) {
+  const entries = Object.entries(event.weather_evidence || {});
+  if (!entries.length)
+    return el("p", weatherTypes[weatherClass(event)].label, "weather-note");
+  const box = el("details", null, "weather-evidence");
+  const summary = el(
+    "summary",
+    entries.map(([key]) => weatherTypes[key].label).join(" + "),
+  );
+  summary.title = "Read the weather wording in the initial warning";
+  box.append(summary);
+  for (const quote of new Set(entries.map(([, text]) => text)))
+    box.append(el("blockquote", quote));
+  return box;
+}
+function polygonWeather(event) {
+  if (Object.hasOwn(event.weather_evidence || {}, state.weather))
+    return state.weather;
+  return weatherClass(event);
+}
+function polygonColor(event) {
+  return state.color === "weather"
+    ? weatherTypes[polygonWeather(event)].color
+    : seasonForMonth(event.month).color;
+}
+function renderWeatherKey() {
+  const key = $("weather-key");
+  $("color-select").value = state.color;
+  $("season-layers").classList.toggle(
+    "neutral-season",
+    state.color === "weather",
+  );
+  key.hidden = state.color !== "weather";
+  key.replaceChildren();
+  if (key.hidden) return;
+  const used = new Set(
+    state.scopeFeatures
+      .filter((f) => f.geometry)
+      .map((f) => polygonWeather(f.properties)),
+  );
+  for (const [name, type] of Object.entries(weatherTypes)) {
+    if (!used.has(name)) continue;
+    const item = el("span");
+    item.style.setProperty("--swatch", type.color);
+    item.append(el("i"), document.createTextNode(type.label));
+    key.append(item);
+  }
+}
+function applyColor() {
+  renderWeatherKey();
+  for (const [uid, layer] of mapEvents) {
+    const color = polygonColor(state.events.get(uid).properties);
+    layer.setStyle({ color, fillColor: color });
+  }
+}
 function buildMapLayers() {
   if (!map) return;
   officeGroup.clearLayers();
@@ -433,20 +496,21 @@ function buildMapLayers() {
       seasons: new Map(seasons.map((season) => [season.id, L.layerGroup()])),
     });
   }
-  for (const feature of [...state.geo.features].reverse()) {
+  for (const feature of [...state.filteredFeatures].reverse()) {
     if (!feature.geometry) continue;
     const p = feature.properties,
       group = regionLayers.get(p.region),
       season = seasonForMonth(p.month);
     if (!group || !season) continue;
+    const color = polygonColor(p);
     const layer = L.geoJSON(feature, {
       pane: "scarPolygons",
       renderer: archiveRenderer,
       style: {
         pane: "scarPolygons",
         renderer: archiveRenderer,
-        color: season.color,
-        fillColor: season.color,
+        color,
+        fillColor: color,
         opacity: 0.8,
         weight: 1.4,
         fillOpacity: 0.14,
@@ -454,20 +518,25 @@ function buildMapLayers() {
       },
     });
     layer.bindPopup(
-      () =>
-        popup(
+      () => {
+        const box = popup(
           p.burn_scars.join(" / ") || "Burn name unspecified",
           p.wfo + " · " + dateText(p.issued_utc),
           [season.label + " issuance window", p.text_excerpt],
-          p.vtec_url,
-        ),
-      { maxWidth: 300 },
+        );
+        box.append(
+          weatherDetails(p),
+          link("Open IEM event record", p.vtec_url),
+        );
+        return box;
+      },
+      { maxWidth: 320, maxHeight: 265 },
     );
     group.seasons.get(season.id).addLayer(layer);
     group.bounds.extend(layer.getBounds());
     mapEvents.set(p.event_uid, layer);
   }
-  for (const r of state.rows) {
+  for (const r of state.filteredRows) {
     const group = regionLayers.get(r.region);
     if (!group) continue;
     const tier = tierFor(r.total_ffw);
@@ -653,8 +722,12 @@ function readPageSettings() {
     regions.find((r) => r.id === params.get("region"))?.id || "all";
   const view = params.get("view");
   const basemap = params.get("basemap");
+  const weather = params.get("weather");
   return {
     region,
+    weather: Object.hasOwn(weatherTypes, weather) ? weather : "all",
+    color: params.get("color") === "weather" ? "weather" : "season",
+    heat: params.get("heat") === "year" ? "year" : "month",
     view: ["wfo", "heat", "recent"].includes(view) ? view : defaultView(region),
     basemap: Object.hasOwn(sources, basemap) ? basemap : "dark",
   };
@@ -664,6 +737,9 @@ function writePageSettings() {
   const url = new URL(location.href);
   for (const [key, fallback] of [
     ["region", "all"],
+    ["heat", "month"],
+    ["weather", "all"],
+    ["color", "season"],
     ["basemap", "dark"],
     ["view", defaultView(state.region)],
   ]) {
@@ -683,11 +759,81 @@ function selectRegion(id, writeUrl = true) {
   refreshScope();
   fitRegion();
 }
+function prepareWeatherArchive() {
+  const features = state.geo?.features || [];
+  state.filteredFeatures =
+    state.weather === "all"
+      ? features
+      : features.filter((f) => matchesWeather(f.properties, state.weather));
+  state.filteredRows =
+    state.weather === "all"
+      ? state.rows
+      : officeRowsForFeatures(
+          state.rows,
+          state.filteredFeatures,
+          state.years,
+          months,
+        );
+  const names = new Map(state.rows.map((r) => [r.wfo, new Set()]));
+  for (const { properties: p } of state.filteredFeatures)
+    for (const scar of p.burn_scars) names.get(p.wfo)?.add(scar);
+  state.names = new Map(
+    state.rows.map((r) => [
+      r.wfo,
+      fold(
+        [
+          r.wfo,
+          r.name,
+          r.state,
+          statesFull[r.state],
+          r.region,
+          ...names.get(r.wfo),
+        ].join(" "),
+      ),
+    ]),
+  );
+}
+function renderWeatherChoices() {
+  const select = $("weather-filter");
+  const counts = { all: 0 };
+  for (const { properties: p } of state.geo?.features || []) {
+    if (!inScope(p.region)) continue;
+    counts.all++;
+    const keys = new Set([
+      weatherClass(p),
+      ...Object.keys(p.weather_evidence || {}),
+    ]);
+    for (const key of keys) counts[key] = (counts[key] || 0) + 1;
+  }
+  const choices = [
+    ["all", "All weather setups"],
+    ...Object.entries(weatherTypes)
+      .filter(
+        ([key]) => key !== "pending" || counts.pending || state.weather === key,
+      )
+      .map(([key, type]) => [key, type.label]),
+  ];
+  select.replaceChildren(
+    ...choices.map(([key, label]) => {
+      const option = el(
+        "option",
+        state.meta ? label + " (" + fmt(counts[key] || 0) + ")" : label,
+      );
+      option.value = key;
+      return option;
+    }),
+  );
+  select.value = state.weather;
+  $("weather-source").textContent =
+    state.meta && state.weather !== "all" && !counts[state.weather]
+      ? "No initial FFW in this region matches this setup."
+      : "Matches terms in the initial FFW.";
+}
 function refreshScope() {
-  state.scopeRows = state.rows
+  state.scopeRows = state.filteredRows
     .filter((r) => inScope(r.region))
     .sort((a, b) => b.total_ffw - a.total_ffw || a.wfo.localeCompare(b.wfo));
-  state.scopeFeatures = (state.geo?.features || []).filter((f) =>
+  state.scopeFeatures = state.filteredFeatures.filter((f) =>
     inScope(f.properties.region),
   );
   for (const button of document.querySelectorAll("[data-region]")) {
@@ -707,6 +853,8 @@ function refreshScope() {
       (r) => r.total_ffw >= hotspotMinimum,
     ).length;
   }
+  renderWeatherChoices();
+  renderWeatherKey();
   applyMapLayers();
   renderTable();
   if (!$("panel-heat").hidden) renderHeat();
@@ -799,7 +947,7 @@ function heatDataRow(body, rowData, options) {
       " archived";
     if (!rowData.total_ffw)
       value.dataset.detail =
-        "0 verified warnings in the full archive. A percentage is unavailable.";
+        "0 qualifying warnings for this selection. A percentage is unavailable.";
     if (monthly) value.dataset.detail += " · " + seasonForMonth(i + 1).label;
     value.setAttribute(
       "aria-label",
@@ -844,11 +992,23 @@ function showHeatCell(button) {
   } else example.removeAttribute("href");
   example.parentElement.hidden = !latest && !pinnedHeatCell;
 }
+function updateYearCoverage() {
+  const coverage = $("year-coverage");
+  coverage.hidden = state.heat !== "year" || !state.meta;
+  if (!coverage.hidden)
+    coverage.textContent =
+      "Coverage starts " +
+      dateFmt.format(new Date(state.meta.archive_start + "T00:00:00Z")) +
+      " and runs through " +
+      dateFmt.format(new Date(state.meta.checked_through_utc)) +
+      ". A zero means no qualifying initial warning.";
+}
 function renderHeat() {
   const monthly = state.heat === "month",
     columns = monthly ? months : state.years;
   $("heat-month").setAttribute("aria-pressed", monthly);
   $("heat-year").setAttribute("aria-pressed", !monthly);
+  updateYearCoverage();
   $("unit-count").setAttribute("aria-pressed", !state.asShare);
   $("unit-share").setAttribute("aria-pressed", state.asShare);
   const labels = state.asShare
@@ -1003,11 +1163,11 @@ function renderFeed() {
       f.geometry ? focus : el("span", "Polygon unavailable"),
       link("IEM event record", p.vtec_url),
     );
-    card.append(head, title, bottom);
+    card.append(head, title, weatherDetails(p), bottom);
     out.append(card);
   }
   if (!rows.length)
-    out.append(el("p", "No verified events in this region.", "empty"));
+    out.append(el("p", "No archived warnings match this selection.", "empty"));
   $("recent-feed").replaceChildren(out);
   $("feed-count").textContent =
     "Showing " + Math.min(state.limit, rows.length) + " of " + fmt(rows.length);
@@ -1035,13 +1195,22 @@ function downloadFile(name, bytes, type) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(u), 2000);
 }
+function archiveFilename(suffix) {
+  return [
+    "burn-scar",
+    state.region,
+    ...(state.weather === "all" ? [] : [state.weather]),
+    suffix,
+  ].join("-");
+}
 function exportCsv() {
-  const years = Object.keys(state.rows[0].yearly),
+  const years = state.years,
     columns = [
       "wfo",
       "name",
       "state",
       "region",
+      "weather_setup_filter",
       "total_ffw",
       "peak_season",
       "top_scars",
@@ -1056,6 +1225,9 @@ function exportCsv() {
       r.name,
       r.state,
       r.region,
+      state.weather === "all"
+        ? "All weather setups"
+        : weatherTypes[state.weather].label,
       r.total_ffw,
       r.peak_season,
       r.top_scars,
@@ -1072,7 +1244,7 @@ function exportCsv() {
     )
     .join("\r\n");
   downloadFile(
-    "burn-scar-" + state.region + "-wfo-summary.csv",
+    archiveFilename("wfo-summary.csv"),
     "\ufeff" + csv + "\r\n",
     "text/csv;charset=utf-8",
   );
@@ -1123,44 +1295,30 @@ async function loadArchive() {
     }
     const { summary, metadata, geo } = data;
     const changed = state.meta?.geojson_sha256 !== metadata.geojson_sha256;
-    const refreshAnalysis =
-      changed || state.years.at(-1) !== summary.years.at(-1);
+    const firstYear = Number(metadata.archive_start.slice(0, 4));
+    const lastYear = Number(metadata.checked_through_utc.slice(0, 4));
+    const refreshAnalysis = changed || state.years.at(-1) !== lastYear;
     state.meta = metadata;
-    state.years = summary.years;
-    state.rows = summary.wfos;
-    state.geo = geo;
-    state.events = new Map(
-      geo.features.map((f) => [f.properties.event_uid, f]),
-    );
-    state.names.clear();
-    officeIds.clear();
-    const namesByOffice = new Map(state.rows.map((r) => [r.wfo, new Set()]));
-    geo.features.forEach((f) =>
-      f.properties.burn_scars.forEach((n) =>
-        namesByOffice.get(f.properties.wfo)?.add(n),
-      ),
-    );
-    state.rows.forEach((r) => {
-      officeIds.add(r.wfo);
-      state.names.set(
-        r.wfo,
-        fold(
-          [
-            r.wfo,
-            r.name,
-            r.state,
-            statesFull[r.state],
-            r.region,
-            ...namesByOffice.get(r.wfo),
-          ].join(" "),
-        ),
+    if (refreshAnalysis) {
+      state.years = Array.from(
+        { length: lastYear - firstYear + 1 },
+        (_, i) => firstYear + i,
       );
-    });
-    for (const row of state.rows) officeRegions.set(row.wfo, row.region);
-    const range =
-      metadata.archive_start.slice(0, 4) +
-      "–" +
-      metadata.checked_through_utc.slice(0, 4);
+      state.rows = summary.wfos.map((r) => ({
+        ...r,
+        region: officeRegions.get(r.wfo) || r.region,
+      }));
+      state.geo = geo;
+      state.events = new Map(
+        geo.features.map((f) => {
+          const p = f.properties;
+          p.region = officeRegions.get(p.wfo) || p.region;
+          return [p.event_uid, f];
+        }),
+      );
+      prepareWeatherArchive();
+    }
+    const range = firstYear + "–" + lastYear;
     $("stat-range").textContent = range;
     $("legend-years").textContent = range;
     $("last-sync-badge").dateTime = metadata.checked_through_utc;
@@ -1179,8 +1337,13 @@ async function loadArchive() {
     );
     const firstLoad = !archiveInitialized;
     archiveInitialized = true;
-    if (changed) buildMapLayers();
-    if (refreshAnalysis) refreshScope();
+    if (refreshAnalysis) {
+      buildMapLayers();
+      refreshScope();
+    } else if (state.view === "heat" && state.heat === "year") {
+      // The cutoff can advance without a change to the warning set.
+      updateYearCoverage();
+    }
     if (firstLoad) fitRegion();
     await pollActive();
   } catch {
@@ -1371,7 +1534,7 @@ $("export-geo").addEventListener("click", () => {
     codes.has(f.properties.wfo),
   );
   downloadFile(
-    "burn-scar-" + state.region + "-warnings.geojson",
+    archiveFilename("warnings.geojson"),
     JSON.stringify({ type: "FeatureCollection", features }),
     "application/geo+json",
   );
@@ -1383,6 +1546,7 @@ $("feed-more").addEventListener("click", () => {
 for (const mode of ["month", "year"])
   $("heat-" + mode).addEventListener("click", () => {
     state.heat = mode;
+    writePageSettings();
     renderHeat();
   });
 for (const unit of ["count", "share"])
@@ -1394,11 +1558,35 @@ for (const button of document.querySelectorAll("[data-region]"))
   button.addEventListener("click", () => selectRegion(button.dataset.region));
 for (const radio of document.querySelectorAll('input[name="basemap"]'))
   radio.addEventListener("change", () => selectBasemap(radio.value));
+$("weather-filter").addEventListener("change", () => {
+  const selected = $("weather-filter").value;
+  if (selected !== "all") state.color = "weather";
+  state.weather = selected;
+  prepareWeatherArchive();
+  buildMapLayers();
+  selectRegion(state.region);
+});
+$("color-select").addEventListener("change", () => {
+  state.color = $("color-select").value;
+  applyColor();
+  writePageSettings();
+});
 addEventListener("popstate", () => {
-  const { region, view, basemap } = readPageSettings();
-  if (region !== state.region) selectRegion(region, false);
-  if (basemap !== state.basemap) selectBasemap(basemap, false);
-  if (view !== state.view) tabView(view, false);
+  const settings = readPageSettings();
+  const scopeChanged =
+    settings.region !== state.region || settings.weather !== state.weather;
+  const colorChanged = settings.color !== state.color;
+  state.heat = settings.heat;
+  state.color = settings.color;
+  if (settings.weather !== state.weather) {
+    state.weather = settings.weather;
+    prepareWeatherArchive();
+    buildMapLayers();
+  } else if (colorChanged) applyColor();
+  if (scopeChanged) selectRegion(settings.region, false);
+  if (settings.basemap !== state.basemap)
+    selectBasemap(settings.basemap, false);
+  tabView(settings.view, false);
 });
 const heatTable = $("heat-table");
 $("heat-unpin").addEventListener("click", () => {
