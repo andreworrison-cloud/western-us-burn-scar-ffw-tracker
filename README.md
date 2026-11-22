@@ -4,10 +4,11 @@ An interactive archive of initial NWS flash flood warnings that explicitly ident
 
 ## Using the dashboard
 
-- Select a WFO row to locate its office and see its warning total, peak season and most frequently named burns. Search by office code, city, state name or abbreviation, region or any extracted burn name. The column headings change the sort order.
-- Toggle archived polygons, office locations and active warnings below the map. The basemap selector offers Esri Dark Gray Canvas, World Topographic Map, World Imagery and OpenStreetMap. Local terrain and state outlines remain available independently of streamed tiles. Use the extent button to return to the western US.
-- Monthly heatmap cells sum each calendar month across the archive. Annual cells show 2015 through the current year. The current year is partial. Each office’s peak season is the busiest rolling three-month window in its monthly issuance totals, including windows that cross December. Tied windows are listed in the office popup. These counts describe issuance timing and do not diagnose the storm regime.
-- Recent events link directly to the corresponding IEM VTEC record. CSV exports follow the office search and sort and include all calendar years and monthly totals. GeoJSON exports the full event collection. Each feature includes its full initial VTEC tag, source excerpt and geometry source. Times are UTC.
+- Select a region to zoom the map and update the office totals, archived and active warning layers, heat maps, seasonal summaries, recent events and exports. Copy the page URL to share the selected region. **Reset Western U.S.** restores all 33 offices.
+- The heat map opens in monthly count mode. Switch to annual values from 2015 onward or select **Share %** to compare the percentage of each row’s full archive. Select a cell for its count and denominator. Use the arrow keys to move between cells. Select a regional row label to filter, or a WFO row label to locate its office. The current year is partial.
+- Office markers show lifetime warning counts. Pink marks more than 100 warnings, orange 30–100, gold 10–29, blue 1–9, and gray zero. Offices with 30 or more warnings appear in the hotspot group. Archived warning footprints are colored by issuance month. The legend independently switches the July–September, October–March and April–June layers and the live NWS layer. The seasonal cards summarize timing. They do not identify the mechanism of an individual storm.
+- Toggle WFO labels, state boundaries and archived polygons on the map. The layers menu controls office markers, dark-map place names and the four basemaps. Locally bundled terrain and state outlines are available when streamed tiles are unavailable.
+- The WFO table supports sorting and searches by code, city, state, region or named burn. CSV exports the displayed offices, including all calendar years and monthly totals. GeoJSON exports every archived warning issued by those same offices. Recent events link to their IEM VTEC records and mapped warning footprints.
 
 ## Archive method and coverage
 

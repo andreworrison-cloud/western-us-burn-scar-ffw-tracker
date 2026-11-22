@@ -1,4 +1,14 @@
 import { qualifyingAlerts } from "./alerts.mjs";
+import {
+  regions,
+  seasons,
+  seasonForMonth,
+  tiers,
+  tierFor,
+  hotspotMinimum,
+  aggregate,
+  heatBand,
+} from "./explorer.mjs";
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
@@ -36,10 +46,22 @@ const state = {
   sort: "total_ffw",
   dir: -1,
   heat: "month",
+  asShare: false,
+  region: "all",
+  scopeRows: [],
+  scopeFeatures: [],
   limit: 16,
   meta: null,
 };
 const officeIds = new Set();
+const officeRegions = new Map();
+for (const region of regions) {
+  for (const code of region.offices) {
+    officeIds.add(code);
+    officeRegions.set(code, region.name);
+  }
+}
+const regionLayers = new Map();
 const mapOffices = new Map(),
   mapEvents = new Map();
 const fullBounds = [
@@ -55,10 +77,15 @@ let archiveRenderer,
   officeGroup,
   historyGroup,
   liveGroup,
+  labelGroup,
+  borderGroup,
+  placeLayer,
+  lastLiveFailed = false,
   lastAlerts = [],
   lastPoll = 0,
   activeBusy = false,
-  archiveBusy = false;
+  archiveBusy = false,
+  archiveInitialized = false;
 
 function el(tag, text, className) {
   const node = document.createElement(tag);
@@ -93,19 +120,36 @@ async function get(url, timeout = 25000) {
   if (!response.ok) throw new Error("HTTP " + response.status);
   return response;
 }
-function checkLayer(input, layer) {
-  if (!map || !layer) return;
-  if ($(input).checked) {
-    if (!map.hasLayer(layer)) layer.addTo(map);
-  } else if (map.hasLayer(layer)) map.removeLayer(layer);
+function setLayer(parent, layer, on) {
+  if (!parent || !layer) return;
+  if (on && !parent.hasLayer(layer)) parent.addLayer(layer);
+  else if (!on && parent.hasLayer(layer)) parent.removeLayer(layer);
 }
-function home() {
-  if (map)
-    map.fitBounds(fullBounds, {
-      padding: [12, 10],
-      animate: false,
-      maxZoom: 6,
-    });
+function checkLayer(input, layer) {
+  setLayer(map, layer, $(input).checked);
+}
+function selectedRegion() {
+  return regions.find((r) => r.id === state.region);
+}
+function inScope(name) {
+  return state.region === "all" || selectedRegion()?.name === name;
+}
+function fitRegion() {
+  if (!map) return;
+  const region = selectedRegion();
+  const bounds = L.latLngBounds([]);
+  for (const [name, group] of regionLayers)
+    if ((!region || region.name === name) && group.bounds.isValid())
+      bounds.extend(group.bounds);
+  const extent = bounds.isValid() ? bounds : fullBounds;
+  const height = map.getSize().y;
+  map.stop();
+  map.fitBounds(extent, {
+    paddingTopLeft: [22, height < 450 ? 48 : 55],
+    paddingBottomRight: [22, height < 450 ? 55 : 70],
+    animate: false,
+    maxZoom: 8,
+  });
 }
 const tiles = "https://server.arcgisonline.com/ArcGIS/rest/services/";
 const esri =
@@ -116,7 +160,7 @@ const sources = {
   dark: [
     tiles + "Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     esri + ", HERE, Garmin, " + osm + ", GIS user community",
-    0.32,
+    0.72,
     16,
   ],
   topo: [
@@ -142,6 +186,20 @@ function selectBasemap() {
   if (baseLayer) map.removeLayer(baseLayer);
   const version = ++baseVersion;
   $("map").dataset.basemap = id;
+  $("tile-status").hidden = true;
+  $("places-option").hidden = id !== "dark";
+  if (!placeLayer)
+    placeLayer = L.tileLayer(
+      tiles + "Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+      {
+        pane: "placeNames",
+        opacity: 0.83,
+        maxNativeZoom: 16,
+        maxZoom: 19,
+        updateWhenIdle: true,
+      },
+    );
+  setLayer(map, placeLayer, id === "dark" && $("toggle-places").checked);
   baseLayer = L.tileLayer(url, {
     pane: "tiles",
     maxNativeZoom,
@@ -155,18 +213,17 @@ function selectBasemap() {
     failed = 0;
   baseLayer.on("tileload", () => {
     valid++;
-    if (version === baseVersion && valid === 1)
-      $("map").removeAttribute("data-tile-error");
+    if (version === baseVersion && valid === 1) $("tile-status").hidden = true;
   });
   baseLayer.on("tileerror", () => {
     if (++failed > 2 && !valid && version === baseVersion)
-      $("map").dataset.tileError = "true";
+      $("tile-status").hidden = false;
   });
 }
 function setupMap() {
   if (!window.L) {
     $("map").textContent =
-      "Map unavailable. The warning table and exports are available below.";
+      "Map unavailable. The office table and exports are still available.";
     return;
   }
   map = L.map("map", {
@@ -182,17 +239,28 @@ function setupMap() {
     relief: 180,
     tiles: 220,
     borders: 330,
+    placeNames: 340,
     scarPolygons: 400,
+    postal: 440,
     offices: 470,
+    officeLabels: 475,
     live: 490,
-    postal: 520,
   })) {
     const pane = map.createPane(name);
     pane.style.zIndex = z;
-    if (["relief", "tiles", "borders", "postal"].includes(name))
+    if (
+      [
+        "relief",
+        "tiles",
+        "borders",
+        "placeNames",
+        "postal",
+        "officeLabels",
+      ].includes(name)
+    )
       pane.style.pointerEvents = "none";
   }
-  home();
+  fitRegion();
   L.imageOverlay(
     "./assets/western_relief.webp",
     [
@@ -206,38 +274,44 @@ function setupMap() {
     },
   ).addTo(map);
   selectBasemap();
-  L.control.zoom({ position: "topleft" }).addTo(map);
+  L.control.zoom({ position: "topright" }).addTo(map);
   L.control
     .scale({
       position: "bottomleft",
       imperial: true,
       metric: false,
-      maxWidth: 75,
+      maxWidth: 70,
     })
     .addTo(map);
   officeGroup = L.layerGroup().addTo(map);
   historyGroup = L.layerGroup().addTo(map);
   liveGroup = L.layerGroup().addTo(map);
-  $("map-reset").addEventListener("click", home);
-  $("basemap").addEventListener("change", selectBasemap);
-  [
-    ["toggle-archive", historyGroup],
-    ["toggle-offices", officeGroup],
-    ["toggle-active", liveGroup],
-  ].forEach(([id, group]) =>
-    $(id).addEventListener("change", () => checkLayer(id, group)),
-  );
+  borderGroup = L.layerGroup().addTo(map);
+  labelGroup = L.layerGroup().addTo(map);
+  archiveRenderer = L.canvas({ pane: "scarPolygons", padding: 0.25 });
+  $("map-reset").addEventListener("click", () => selectRegion("all"));
+  $("basemap").addEventListener("change", () => {
+    selectBasemap();
+    $("layer-menu").open = false;
+  });
+  for (const id of [
+    "toggle-archive",
+    "toggle-offices",
+    "toggle-labels",
+    "toggle-borders",
+    "toggle-active",
+  ])
+    $(id).addEventListener("change", applyMapLayers);
   get("./assets/western_states.geojson")
     .then((r) => r.json())
     .then((states) => {
       L.geoJSON(states, {
         pane: "borders",
-        style: { color: "#aab7bd", opacity: 0.58, weight: 1.05, fill: false },
+        style: { color: "#9ab8d4", opacity: 0.8, weight: 1.2, fill: false },
         interactive: false,
         attribution: "Boundaries: U.S. Census Bureau",
-      }).addTo(map);
-      const labels = L.layerGroup();
-      for (const state of states.features)
+      }).addTo(borderGroup);
+      for (const state of states.features) {
         L.tooltip({
           pane: "postal",
           permanent: true,
@@ -248,39 +322,123 @@ function setupMap() {
         })
           .setLatLng(state.properties.label)
           .setContent(el("span", state.properties.postal))
-          .addTo(labels);
-      labels.addTo(map);
+          .addTo(borderGroup);
+      }
     })
     .catch(() => {
-      $("map-heading").title = "State boundaries unavailable";
+      $("toggle-borders").closest("label").title =
+        "State boundaries unavailable";
     });
-  new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(
-    $("map"),
-  );
+  $("toggle-places").addEventListener("change", () => {
+    setLayer(
+      map,
+      placeLayer,
+      $("basemap").value === "dark" && $("toggle-places").checked,
+    );
+  });
+  const coordinates = (point) => {
+    const lat = point.lat,
+      lng = point.wrap().lng;
+    $("map-position").textContent =
+      Math.abs(lat).toFixed(2) +
+      "°" +
+      (lat < 0 ? "S" : "N") +
+      " " +
+      Math.abs(lng).toFixed(2) +
+      "°" +
+      (lng < 0 ? "W" : "E");
+  };
+  map.on("mousemove", (e) => coordinates(e.latlng));
+  map.on("moveend", () => {
+    renderOfficeLabels();
+    coordinates(map.getCenter());
+  });
+  coordinates(map.getCenter());
+  new ResizeObserver(() => {
+    map.invalidateSize({ pan: false });
+  }).observe($("map"));
 }
-function renderMap() {
+function renderOfficeLabels() {
+  if (!map || !labelGroup) return;
+  labelGroup.clearLayers();
+  if (!$("toggle-labels").checked || !$("toggle-offices").checked) return;
+  // Keep neighboring offices legible as the user changes region or zoom.
+  const used = [];
+  const size = map.getSize();
+  for (const row of state.scopeRows) {
+    const pos = map.latLngToContainerPoint([row.lat, row.lon]);
+    if (
+      pos.x < -24 ||
+      pos.x > size.x + 24 ||
+      pos.y < -15 ||
+      pos.y > size.y + 15
+    )
+      continue;
+    const d = tierFor(row.total_ffw).radius + 9;
+    const offsets = [
+      [0, -d],
+      [0, d],
+      [d + 8, 0],
+      [-d - 8, 0],
+      [d + 5, -d],
+      [-d - 5, -d],
+      [d + 5, d],
+      [-d - 5, d],
+    ];
+    const offset = offsets.find(([dx, dy]) => {
+      const x = pos.x + dx,
+        y = pos.y + dy;
+      return !used.some(
+        (p) => Math.abs(p.x - x) < 29 && Math.abs(p.y - y) < 15,
+      );
+    });
+    if (!offset) continue;
+    used.push({ x: pos.x + offset[0], y: pos.y + offset[1] });
+    L.tooltip({
+      pane: "officeLabels",
+      permanent: true,
+      interactive: false,
+      direction: "center",
+      offset,
+      className: "wfo-label",
+      opacity: 1,
+    })
+      .setLatLng([row.lat, row.lon])
+      .setContent(el("span", row.wfo))
+      .addTo(labelGroup);
+  }
+}
+function buildMapLayers() {
   if (!map) return;
   officeGroup.clearLayers();
   historyGroup.clearLayers();
-  mapOffices.clear();
   mapEvents.clear();
-  const renderer = L.canvas({ pane: "scarPolygons", padding: 0.3 });
-  if (archiveRenderer) map.removeLayer(archiveRenderer);
-  archiveRenderer = renderer;
+  mapOffices.clear();
+  regionLayers.clear();
+  for (const region of regions) {
+    regionLayers.set(region.name, {
+      offices: L.layerGroup(),
+      bounds: L.latLngBounds([]),
+      seasons: new Map(seasons.map((season) => [season.id, L.layerGroup()])),
+    });
+  }
   for (const feature of [...state.geo.features].reverse()) {
     if (!feature.geometry) continue;
-    const p = feature.properties;
+    const p = feature.properties,
+      group = regionLayers.get(p.region),
+      season = seasonForMonth(p.month);
+    if (!group || !season) continue;
     const layer = L.geoJSON(feature, {
       pane: "scarPolygons",
-      renderer,
+      renderer: archiveRenderer,
       style: {
         pane: "scarPolygons",
-        renderer,
-        color: "#f3ae64",
-        weight: 1.25,
-        opacity: 0.75,
-        fillColor: "#e99a4f",
-        fillOpacity: 0.18,
+        renderer: archiveRenderer,
+        color: season.color,
+        fillColor: season.color,
+        opacity: 0.8,
+        weight: 1.4,
+        fillOpacity: 0.14,
         smoothFactor: 0.6,
       },
     });
@@ -289,44 +447,79 @@ function renderMap() {
         popup(
           p.burn_scars.join(" / ") || "Burn name unspecified",
           p.wfo + " · " + dateText(p.issued_utc),
-          [p.text_excerpt],
+          [season.label + " issuance window", p.text_excerpt],
           p.vtec_url,
         ),
       { maxWidth: 300 },
     );
-    layer.addTo(historyGroup);
+    group.seasons.get(season.id).addLayer(layer);
+    group.bounds.extend(layer.getBounds());
     mapEvents.set(p.event_uid, layer);
   }
   for (const r of state.rows) {
+    const group = regionLayers.get(r.region);
+    if (!group) continue;
+    const tier = tierFor(r.total_ffw);
     const marker = L.circleMarker([r.lat, r.lon], {
       pane: "offices",
-      radius: 4.1,
-      color: "#94e2d9",
-      weight: 1.45,
-      fillColor: "#224e53",
-      fillOpacity: 1,
+      radius: tier.radius,
+      color: "#f5faff",
+      weight: 1.7,
+      fillColor: tier.color,
+      fillOpacity: 0.95,
       bubblingMouseEvents: false,
     });
     marker.bindTooltip(r.wfo + " · " + r.name, {
       direction: "top",
-      offset: [0, -4],
+      offset: [0, -10],
     });
     marker.bindPopup(
       () =>
         popup(r.wfo + " · " + r.name, r.region, [
-          fmt(r.total_ffw) + " verified warnings",
-          r.total_ffw ? "Peak season: " + r.peak_season : "",
-          r.top_scars ? "Most frequently named: " + r.top_scars : "",
+          fmt(r.total_ffw) + " verified warnings · " + tier.label + " activity",
+          r.total_ffw ? "Peak season · " + r.peak_season : "",
+          r.top_scars ? "Frequently named burns · " + r.top_scars : "",
         ]),
       { maxWidth: 285, autoPan: false },
     );
-    marker.addTo(officeGroup);
+    group.offices.addLayer(marker);
+    group.bounds.extend(marker.getLatLng());
     mapOffices.set(r.wfo, marker);
   }
 }
+function applyMapLayers() {
+  if (map) {
+    for (const [region, group] of regionLayers) {
+      const visible = inScope(region);
+      setLayer(officeGroup, group.offices, visible);
+      for (const [id, bucket] of group.seasons)
+        setLayer(historyGroup, bucket, visible && $("season-" + id).checked);
+    }
+    checkLayer("toggle-archive", historyGroup);
+    checkLayer("toggle-offices", officeGroup);
+    checkLayer("toggle-active", liveGroup);
+    checkLayer("toggle-borders", borderGroup);
+    renderOfficeLabels();
+  }
+  if (!state.meta) return;
+  const enabled = new Set(
+    seasons.filter((s) => $("season-" + s.id).checked).flatMap((s) => s.months),
+  );
+  const mapped = state.scopeFeatures.filter((f) => f.geometry);
+  const visible = $("toggle-archive").checked
+    ? mapped.filter((f) => enabled.has(f.properties.month)).length
+    : 0;
+  const missing = state.scopeFeatures.length - mapped.length;
+  $("mapped-count").textContent =
+    fmt(visible) +
+    " of " +
+    fmt(mapped.length) +
+    " polygons shown" +
+    (missing ? " · " + fmt(missing) + " without geometry" : "");
+}
 function bringMapIntoView() {
   if (window.matchMedia("(max-width:800px)").matches)
-    $("map-heading").scrollIntoView({
+    $("map-stage").scrollIntoView({
       block: "start",
       behavior: reduced.matches ? "instant" : "smooth",
     });
@@ -338,6 +531,7 @@ function focusOffice(code) {
   renderTable();
   $("toggle-offices").checked = true;
   checkLayer("toggle-offices", officeGroup);
+  renderOfficeLabels();
   bringMapIntoView();
   map.stop();
   map.flyTo(marker.getLatLng(), 7, {
@@ -350,7 +544,9 @@ function focusEvent(uid) {
   const layer = mapEvents.get(uid);
   if (!layer) return;
   $("toggle-archive").checked = true;
-  checkLayer("toggle-archive", historyGroup);
+  const event = state.events.get(uid);
+  $("season-" + seasonForMonth(event.properties.month).id).checked = true;
+  applyMapLayers();
   bringMapIntoView();
   map.stop();
   map.fitBounds(layer.getBounds(), {
@@ -382,8 +578,8 @@ const statesFull = {
 };
 function shownRows() {
   const query = fold($("search").value.trim());
-  return state.rows
-    .filter((r) => !query || state.names.get(r.wfo).includes(query))
+  return state.scopeRows
+    .filter((r) => !query || state.names.get(r.wfo)?.includes(query))
     .sort((a, b) => {
       let n =
         state.sort === "total_ffw"
@@ -426,7 +622,7 @@ function renderTable() {
   $("office-rows").replaceChildren(output);
   $("no-offices").hidden = !!rows.length;
   $("office-count").textContent =
-    rows.length + " of " + state.rows.length + " offices";
+    rows.length + " of " + state.scopeRows.length + " offices";
   document.querySelectorAll("[data-sort]").forEach((b) => {
     const th = b.closest("th");
     if (b.dataset.sort === state.sort)
@@ -434,56 +630,281 @@ function renderTable() {
     else th.removeAttribute("aria-sort");
   });
   $("export-csv").disabled = !rows.length;
+  $("export-geo").disabled = !rows.length;
+}
+function regionFromUrl() {
+  const key = new URLSearchParams(location.search).get("region");
+  return regions.some((region) => region.id === key) ? key : "all";
+}
+function selectRegion(id, writeUrl = true) {
+  if (id !== "all" && !regions.some((r) => r.id === id)) return;
+  state.region = id;
+  state.selected = null;
+  state.limit = 16;
+  $("search").value = "";
+  if (writeUrl && ["https:", "http:"].includes(location.protocol)) {
+    const url = new URL(location.href);
+    if (id === "all") url.searchParams.delete("region");
+    else url.searchParams.set("region", id);
+    if (url.href !== location.href) history.pushState(null, "", url);
+  }
+  map?.closePopup();
+  refreshScope();
+  fitRegion();
+}
+function refreshScope() {
+  state.scopeRows = state.rows
+    .filter((r) => inScope(r.region))
+    .sort((a, b) => b.total_ffw - a.total_ffw || a.wfo.localeCompare(b.wfo));
+  state.scopeFeatures = (state.geo?.features || []).filter((f) =>
+    inScope(f.properties.region),
+  );
+  for (const button of document.querySelectorAll("[data-region]")) {
+    const key = button.dataset.region,
+      region = regions.find((r) => r.id === key);
+    button.setAttribute("aria-pressed", key === state.region);
+    if (region) button.title = region.states;
+    if (state.meta)
+      button.querySelector(".region-count").textContent = region
+        ? state.rows.filter((r) => r.region === region.name).length
+        : state.rows.length;
+  }
+  if (state.meta) {
+    $("stat-total").textContent = fmt(state.scopeFeatures.length);
+    $("stat-offices").textContent = state.scopeRows.length;
+    $("stat-hotspots").textContent = state.scopeRows.filter(
+      (r) => r.total_ffw >= hotspotMinimum,
+    ).length;
+  }
+  applyMapLayers();
+  renderTable();
+  if (!$("panel-heat").hidden) renderHeat();
+  if (!$("panel-recent").hidden) renderFeed();
+  if (lastPoll || lastLiveFailed) showActive(lastAlerts, lastLiveFailed);
+}
+function setupLegend() {
+  for (const t of tiers) {
+    const item = el("span");
+    item.style.setProperty("--swatch", t.color);
+    item.append(
+      el("i"),
+      document.createTextNode(t.label + " (" + t.range + ")"),
+    );
+    $("office-tiers").append(item);
+  }
+  $("season-layers").append(el("span", "Issuance month"));
+  for (const s of seasons) {
+    const label = el("label"),
+      input = el("input");
+    input.type = "checkbox";
+    input.id = "season-" + s.id;
+    input.checked = true;
+    input.setAttribute("aria-label", "Show " + s.label + " archived polygons");
+    label.title = "Toggle " + s.label + " warning polygons";
+    label.style.setProperty("--swatch", s.color);
+    label.append(input, el("i"), document.createTextNode(s.label));
+    input.addEventListener("change", applyMapLayers);
+    $("season-layers").append(label);
+  }
+  const liveLabel = el("label", null, "live-key"),
+    liveInput = el("input");
+  liveInput.type = "checkbox";
+  liveInput.id = "toggle-active";
+  liveInput.checked = true;
+  liveInput.setAttribute("aria-label", "Show active NWS warnings");
+  liveLabel.style.setProperty("--swatch", "#ff655f");
+  liveLabel.append(liveInput, el("i"), document.createTextNode("Live NWS"));
+  $("season-layers").append(liveLabel);
+}
+const percent = (value) =>
+  value > 0 && value < 0.1 ? "<0.1%" : Number(value.toFixed(1)) + "%";
+function heatSection(body, label, columns, kind = "") {
+  const row = body.insertRow(),
+    header = el("th");
+  row.className = "section-label " + kind;
+  header.colSpan = columns + 1;
+  header.append(el("span", label));
+  row.append(header);
+}
+function heatDataRow(body, rowData, options) {
+  const { label, code, city, select, isTotal, columns, monthly } = options;
+  const tr = body.insertRow(),
+    heading = el("th");
+  heading.scope = "row";
+  if (isTotal) tr.className = "total-row";
+  const name = el(select ? "button" : "span");
+  if (select) {
+    name.type = "button";
+    name.addEventListener("click", select);
+    name.title = code ? "Locate " + label + " on the map" : "View " + label;
+    name.setAttribute("aria-label", name.title);
+  }
+  if (code) name.append(el("strong", code), el("span", city, "office-short"));
+  else name.textContent = label;
+  heading.append(name);
+  tr.append(heading);
+  columns.forEach((col, i) => {
+    const n = monthly ? rowData.monthly[i] : rowData.yearly[col] || 0;
+    const share = rowData.total_ffw ? (100 * n) / rowData.total_ffw : 0;
+    const td = tr.insertCell();
+    const value = el(
+      "button",
+      state.asShare ? (rowData.total_ffw ? percent(share) : "—") : fmt(n),
+      "heat-value band-" + heatBand(n, share, state.asShare),
+    );
+    value.type = "button";
+    value.tabIndex = -1;
+    value.dataset.col = String(i);
+    value.dataset.heading = label + " · " + col;
+    value.dataset.detail =
+      fmt(n) +
+      (n === 1 ? " warning" : " warnings") +
+      " · " +
+      percent(share) +
+      " of " +
+      fmt(rowData.total_ffw) +
+      " in this row’s full archive";
+    if (!rowData.total_ffw)
+      value.dataset.detail =
+        "0 verified warnings in the full archive. A percentage is unavailable.";
+    if (monthly)
+      value.dataset.detail += " · " + seasonForMonth(i + 1).label + " window";
+    value.setAttribute(
+      "aria-label",
+      value.dataset.heading + ". " + value.dataset.detail,
+    );
+    td.append(value);
+  });
+}
+function showHeatCell(button) {
+  const table = $("heat-table");
+  const previous = table.querySelector(".heat-value.picked");
+  if (previous !== button) previous?.classList.remove("picked");
+  button.classList.add("picked");
+  $("heat-detail-title").textContent = button.dataset.heading;
+  $("heat-detail-body").textContent = button.dataset.detail;
 }
 function renderHeat() {
-  const monthly = state.heat === "month";
-  const cols = monthly ? months : state.years;
+  const monthly = state.heat === "month",
+    columns = monthly ? months : state.years;
   $("heat-month").setAttribute("aria-pressed", monthly);
   $("heat-year").setAttribute("aria-pressed", !monthly);
+  $("unit-count").setAttribute("aria-pressed", !state.asShare);
+  $("unit-share").setAttribute("aria-pressed", state.asShare);
+  const labels = state.asShare
+    ? ["0", "<5", "5–<10", "10–<20", "20–<30", "≥30"]
+    : ["0", "1–4", "5–14", "15–29", "30–59", "60+"];
+  const ramp = $("heat-ramp");
+  ramp.replaceChildren();
+  labels.forEach((label, i) => {
+    const swatch = el("span", label, "band-" + i);
+    swatch.title = state.asShare
+      ? "Share of the row’s full archive (%)"
+      : "Verified warning count";
+    ramp.append(swatch);
+  });
+  if (!state.meta || !columns.length) return;
+  const total = aggregate(state.scopeRows, state.years);
+  const extent = monthly
+    ? $("stat-range").textContent
+    : state.years[0] + "–" + state.years.at(-1);
+  $("annual-range").textContent = state.years[0] + "–" + state.years.at(-1);
+  $("heat-detail-title").textContent = monthly
+    ? "Seasonal heat map · " + extent
+    : "Annual heat map · " + extent;
+  $("heat-detail-body").textContent = monthly
+    ? "Select a cell for its share or an office to locate it on the map."
+    : "Select a cell for its share of all archive years. The current year is partial.";
+  for (const id of ["summer", "cool"]) {
+    const season = seasons.find((s) => s.id === id);
+    const windowCount = (row) =>
+      season.months.reduce((sum, month) => sum + row.monthly[month - 1], 0);
+    const n = windowCount(total);
+    const lead = $(id + "-leaders");
+    lead.replaceChildren();
+    if (n) {
+      const high = Math.max(...state.scopeRows.map(windowCount));
+      lead.append(document.createTextNode("Leading WFO · "));
+      for (const office of state.scopeRows.filter(
+        (row) => windowCount(row) === high,
+      )) {
+        const button = el("button", office.wfo + " (" + fmt(high) + ")");
+        button.type = "button";
+        button.title = "Locate " + office.name;
+        button.addEventListener("click", () => focusOffice(office.wfo));
+        lead.append(button);
+      }
+    }
+    $(id + "-share").textContent =
+      fmt(n) +
+      " warnings · " +
+      percent(total.total_ffw ? (100 * n) / total.total_ffw : 0);
+  }
   const t = el("table", null, "heat");
+  t.setAttribute(
+    "aria-label",
+    monthly
+      ? "Warnings by region, office and month"
+      : "Warnings by region, office and year",
+  );
   const head = t.createTHead().insertRow();
-  head.append(el("th", "WFO"));
-  for (const col of cols) {
-    const h = el("th", String(col));
+  for (const c of ["Subregion / WFO", ...columns]) {
+    const h = el("th", String(c));
     h.scope = "col";
     head.append(h);
   }
-  const body = t.createTBody(),
-    values = (r) => (monthly ? r.monthly : cols.map((c) => r.yearly[c] || 0));
-  const max = Math.max(1, ...state.rows.flatMap(values));
-  const palette = [
-    "#243136",
-    "#453d33",
-    "#70513b",
-    "#95653e",
-    "#bb824d",
-    "#e0a15f",
-    "#f6bd7d",
-  ];
-  for (const r of state.rows) {
-    const tr = body.insertRow(),
-      h = el("th", r.wfo);
-    h.scope = "row";
-    tr.append(h);
-    values(r).forEach((n, i) => {
-      const td = el("td", String(n));
-      const band = n
-        ? Math.max(1, Math.round((Math.log1p(n) / Math.log1p(max)) * 6))
-        : 0;
-      td.style.backgroundColor = palette[band];
-      td.style.color = band >= 4 ? "#131a1f" : "#e0e6e8";
-      td.title =
-        r.wfo + " · " + cols[i] + " · " + n + " warning" + (n === 1 ? "" : "s");
-      tr.append(td);
+  const body = t.createTBody();
+  heatSection(body, "Regional totals · " + extent, columns.length);
+  for (const region of regions.filter((r) => inScope(r.name))) {
+    const rows = state.scopeRows.filter((r) => r.region === region.name);
+    heatDataRow(body, aggregate(rows, state.years), {
+      label: region.short,
+      select: () => selectRegion(region.id),
+      columns,
+      monthly,
     });
   }
+  if (state.region === "all")
+    heatDataRow(body, total, {
+      label: "All western WFOs",
+      isTotal: true,
+      columns,
+      monthly,
+    });
+  const hotspots = state.scopeRows.filter((r) => r.total_ffw >= hotspotMinimum);
+  const others = state.scopeRows.filter((r) => r.total_ffw < hotspotMinimum);
+  for (const group of [
+    {
+      rows: hotspots,
+      label: "Signature hotspots · ≥30 warnings",
+      kind: "offices-section",
+    },
+    {
+      rows: others,
+      label: "Other forecast offices · <30 warnings",
+      kind: "other-section",
+    },
+  ]) {
+    if (!group.rows.length) continue;
+    heatSection(body, group.label, columns.length, group.kind);
+    for (const r of group.rows) {
+      const city = r.name.replace(/, [A-Z]{2}$/, "");
+      heatDataRow(body, r, {
+        label: r.wfo + " · " + city,
+        code: r.wfo,
+        city,
+        select: () => focusOffice(r.wfo),
+        columns,
+        monthly,
+      });
+    }
+  }
   $("heat-table").replaceChildren(t);
-  $("heat-caption").textContent = monthly
-    ? "All years combined"
-    : "Since 2015 · current year partial";
+  const first = t.querySelector(".heat-value");
+  if (first) first.tabIndex = 0;
 }
 function renderFeed() {
-  const rows = state.geo?.features || [],
+  const rows = state.scopeFeatures,
     out = document.createDocumentFragment();
   for (const f of rows.slice(0, state.limit)) {
     const p = f.properties,
@@ -512,7 +933,7 @@ function renderFeed() {
     out.append(card);
   }
   if (!rows.length)
-    out.append(el("p", "No verified events in this archive.", "empty"));
+    out.append(el("p", "No verified events in this region.", "empty"));
   $("recent-feed").replaceChildren(out);
   $("feed-count").textContent =
     "Showing " + Math.min(state.limit, rows.length) + " of " + fmt(rows.length);
@@ -575,7 +996,7 @@ function exportCsv() {
     )
     .join("\r\n");
   downloadFile(
-    "burn-scar-wfo-summary.csv",
+    "burn-scar-" + state.region + "-wfo-summary.csv",
     "\ufeff" + csv + "\r\n",
     "text/csv;charset=utf-8",
   );
@@ -626,6 +1047,8 @@ async function loadArchive() {
     }
     const { summary, metadata, geo } = data;
     const changed = state.meta?.geojson_sha256 !== metadata.geojson_sha256;
+    const refreshAnalysis =
+      changed || state.years.at(-1) !== summary.years.at(-1);
     state.meta = metadata;
     state.years = summary.years;
     state.rows = summary.wfos;
@@ -657,32 +1080,32 @@ async function loadArchive() {
         ),
       );
     });
-    $("stat-total").textContent = fmt(geo.features.length);
-    $("stat-offices").textContent = state.rows.length;
-    $("stat-range").textContent =
+    for (const row of state.rows) officeRegions.set(row.wfo, row.region);
+    const range =
       metadata.archive_start.slice(0, 4) +
       "–" +
       metadata.checked_through_utc.slice(0, 4);
+    $("stat-range").textContent = range;
+    $("legend-years").textContent = range;
     $("last-sync-badge").dateTime = metadata.checked_through_utc;
     $("last-sync-badge").textContent = dateText(metadata.checked_through_utc);
     const stale =
       Date.now() - Date.parse(metadata.checked_through_utc) > 3 * 3600000;
     $("last-sync-badge").closest(".stamp").classList.toggle("stale", stale);
-    $("mapped-count").textContent =
-      fmt(metadata.mapped_events) +
-      " mapped · " +
-      fmt(geo.features.length - metadata.mapped_events) +
-      " without geometry";
-    $("export-geo").disabled = false;
+    $("archive-status").dataset.state = stale ? "stale" : "ready";
+    $("archive-status").querySelector("span").textContent = stale
+      ? "Archive delayed"
+      : "Archive ready";
     notifyArchive(
       stale
-        ? "The last archive check was over three hours ago. The NWS live feed is checked independently."
+        ? "The last IEM archive check was over three hours ago. NWS alerts refresh independently."
         : "",
     );
-    renderTable();
-    if (changed) renderMap();
-    if (!$("panel-heat").hidden) renderHeat();
-    if (!$("panel-recent").hidden) renderFeed();
+    const firstLoad = !archiveInitialized;
+    archiveInitialized = true;
+    if (changed) buildMapLayers();
+    if (refreshAnalysis) refreshScope();
+    if (firstLoad) fitRegion();
     await pollActive();
   } catch {
     notifyArchive(
@@ -691,19 +1114,28 @@ async function loadArchive() {
         : "Archive unavailable. Please retry or open the IEM archive.",
     );
     if (!state.meta) $("last-sync-badge").textContent = "Unavailable";
+    $("archive-status").dataset.state = "error";
+    $("archive-status").querySelector("span").textContent = state.meta
+      ? "Cached archive"
+      : "Archive unavailable";
   } finally {
     archiveBusy = false;
   }
 }
 function showActive(alerts, failed = false) {
   const now = Date.now();
+  lastLiveFailed = failed;
   lastAlerts = alerts.filter((a) => a.ends > now);
+  const inRegion = lastAlerts.filter(
+    (a) => !officeRegions.has(a.office) || inScope(officeRegions.get(a.office)),
+  );
+  const elsewhere = lastAlerts.length - inRegion.length;
   const count = $("stat-active"),
     status = $("active-status"),
     banner = $("active-banner");
   banner.replaceChildren();
-  count.className = failed ? "" : lastAlerts.length ? "live-hot" : "live-ok";
-  count.textContent = failed ? "—" : String(lastAlerts.length);
+  count.className = failed ? "" : inRegion.length ? "live-hot" : "live-ok";
+  count.textContent = failed ? "—" : String(inRegion.length);
   const stamp = lastPoll
     ? new Date(lastPoll).toISOString().slice(11, 16) + " UTC"
     : "";
@@ -718,23 +1150,23 @@ function showActive(alerts, failed = false) {
     banner.append(
       el(
         "span",
-        lastAlerts.length
-          ? "NWS refresh unavailable. Previously reported alerts: "
+        inRegion.length
+          ? "NWS refresh unavailable. Previously reported alerts · "
           : "NWS live status unavailable. ",
       ),
     );
   liveGroup?.clearLayers();
-  if (lastAlerts.length) {
+  if (inRegion.length) {
     banner.append(
       el(
         "strong",
-        lastAlerts.length +
+        inRegion.length +
           " active burn-scar warning" +
-          (lastAlerts.length === 1 ? "" : "s") +
+          (inRegion.length === 1 ? "" : "s") +
           " ",
       ),
     );
-    lastAlerts.forEach((a, i) => {
+    inRegion.forEach((a, i) => {
       let layer;
       if (map && a.geometry) {
         if (!activeRenderer) activeRenderer = L.svg({ pane: "live" });
@@ -784,6 +1216,19 @@ function showActive(alerts, failed = false) {
     banner.append(
       link("Check official alerts", "https://www.weather.gov/alerts"),
     );
+  if (elsewhere) {
+    if (inRegion.length || failed)
+      banner.append(document.createTextNode(" · "));
+    const button = el(
+      "button",
+      elsewhere +
+        (failed ? " previously reported" : " active") +
+        " elsewhere · Show all regions",
+    );
+    button.type = "button";
+    button.addEventListener("click", () => selectRegion("all"));
+    banner.append(button);
+  }
 }
 async function pollActive() {
   if (activeBusy) return;
@@ -838,13 +1283,17 @@ document.querySelectorAll("[data-sort]").forEach((b) =>
 );
 $("search").addEventListener("input", renderTable);
 $("export-csv").addEventListener("click", exportCsv);
-$("export-geo").addEventListener("click", () =>
+$("export-geo").addEventListener("click", () => {
+  const codes = new Set(shownRows().map((r) => r.wfo));
+  const features = state.scopeFeatures.filter((f) =>
+    codes.has(f.properties.wfo),
+  );
   downloadFile(
-    "burn-scar-warnings.geojson",
-    JSON.stringify(state.geo),
+    "burn-scar-" + state.region + "-warnings.geojson",
+    JSON.stringify({ type: "FeatureCollection", features }),
     "application/geo+json",
-  ),
-);
+  );
+});
 $("feed-more").addEventListener("click", () => {
   state.limit += 16;
   renderFeed();
@@ -854,6 +1303,63 @@ for (const mode of ["month", "year"])
     state.heat = mode;
     renderHeat();
   });
+for (const unit of ["count", "share"])
+  $("unit-" + unit).addEventListener("click", () => {
+    state.asShare = unit === "share";
+    renderHeat();
+  });
+for (const button of document.querySelectorAll("[data-region]"))
+  button.addEventListener("click", () => selectRegion(button.dataset.region));
+addEventListener("popstate", () => selectRegion(regionFromUrl(), false));
+const heatTable = $("heat-table");
+for (const type of ["pointerover", "focusin", "click"])
+  heatTable.addEventListener(type, (event) => {
+    const cell = event.target.closest(".heat-value");
+    if (!cell) return;
+    showHeatCell(cell);
+    if (type !== "pointerover") {
+      const old = heatTable.querySelector('.heat-value[tabindex="0"]');
+      if (old) old.tabIndex = -1;
+      cell.tabIndex = 0;
+    }
+  });
+heatTable.addEventListener("keydown", (event) => {
+  const cell = event.target.closest(".heat-value");
+  if (
+    !cell ||
+    ![
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "Home",
+      "End",
+    ].includes(event.key)
+  )
+    return;
+  event.preventDefault();
+  const row = cell.closest("tr"),
+    buttons = [...row.querySelectorAll(".heat-value")];
+  const index = Number(cell.dataset.col);
+  let next;
+  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    const rows = [...heatTable.querySelectorAll("tbody tr")].filter((r) =>
+      r.querySelector(".heat-value"),
+    );
+    next = rows[
+      rows.indexOf(row) + (event.key === "ArrowUp" ? -1 : 1)
+    ]?.querySelector('[data-col="' + index + '"]');
+  } else {
+    const col = {
+      Home: 0,
+      End: buttons.length - 1,
+      ArrowLeft: index - 1,
+      ArrowRight: index + 1,
+    }[event.key];
+    next = buttons[col];
+  }
+  if (next) next.focus();
+});
 for (const id of ["method-open", "coverage-info"])
   $(id).addEventListener("click", () => $("method-dialog").showModal());
 $("method-close").addEventListener("click", () => $("method-dialog").close());
@@ -873,11 +1379,10 @@ $("method-dialog").addEventListener("click", (e) => {
       e.target.close();
   }
 });
+state.region = regionFromUrl();
+setupLegend();
 setupMap();
-// Retain office scoping when the archive server is unavailable.
-"ABQ FGZ PSR TWC EPZ BOU PUB GJT SLC RIW CYS BYZ MSO TFX GGW LOX SGX MTR STO HNX EKA VEF REV LKN SEW OTX PQR MFR PDT BOI PIH MAF LBF"
-  .split(" ")
-  .forEach((v) => officeIds.add(v));
+refreshScope();
 loadArchive();
 pollActive();
 setInterval(pollActive, 120000);

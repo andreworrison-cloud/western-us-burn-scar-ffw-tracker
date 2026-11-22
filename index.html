@@ -3,43 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#10171c" />
+    <meta name="theme-color" content="#0b1325" />
     <meta
       name="description"
       content="Explore western U.S. burn-scar flash flood warnings by forecast office, season and year, with original NWS warning polygons and active alerts."
     />
-    <title>Burn Scar Tracker | Western U.S. flash flood warnings</title>
+    <title>Western U.S. Burn-Scar Flash Flood Warning Explorer</title>
     <link rel="icon" href="./assets/mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=explorer2" />
     <script defer src="./vendor/leaflet/leaflet.js"></script>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=explorer2"></script>
   </head>
   <body>
     <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <symbol id="i-map" viewBox="0 0 24 24">
-        <path d="m3 5 6-2 6 3 6-2v15l-6 2-6-3-6 2zM9 3v15m6-12v15" />
-      </symbol>
-      <symbol id="i-radio" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="1.6" />
-        <path
-          d="M8 8a5.7 5.7 0 0 0 0 8m8-8a5.7 5.7 0 0 1 0 8M5 4.8a10 10 0 0 0 0 14.4m14-14.4a10 10 0 0 1 0 14.4"
-        />
-      </symbol>
       <symbol id="i-stack" viewBox="0 0 24 24">
         <path d="m3 8 9-5 9 5-9 5zM3 12l9 5 9-5M3 16l9 5 9-5" />
-      </symbol>
-      <symbol id="i-calendar" viewBox="0 0 24 24">
-        <rect x="3.5" y="5" width="17" height="16" rx="2" />
-        <path d="M7.5 3v5m9-5v5M4 11h16m-12 4h3m2 0h3" />
-      </symbol>
-      <symbol id="i-pin" viewBox="0 0 24 24">
-        <path d="M19 9c0 5.2-7 12-7 12S5 14.2 5 9a7 7 0 0 1 14 0z" />
-        <circle cx="12" cy="9" r="2.2" />
-      </symbol>
-      <symbol id="i-clock" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="M12 7v5l3 2" />
       </symbol>
       <symbol id="i-info" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="8.5" />
@@ -82,164 +61,213 @@
       </symbol>
     </svg>
     <a class="skip" href="#main">Skip to dashboard</a>
-    <header class="topbar">
-      <div class="top-inner">
-        <a class="brand" href="./"
-          ><img src="./assets/mark.svg" width="32" height="32" alt="" />Burn
-          Scar Tracker</a
-        >
-        <nav aria-label="Primary">
-          <a class="nav-current" href="#main">Dashboard</a
-          ><button id="method-open" type="button">Methodology</button>
-        </nav>
-        <a
-          class="source-link"
-          href="https://mesonet.agron.iastate.edu/vtec/"
-          target="_blank"
-          rel="noopener"
-          >IEM archive <svg class="icon"><use href="#i-link" /></svg
-        ></a>
-      </div>
-    </header>
     <main id="main" class="shell">
-      <section class="intro">
-        <div>
-          <p class="eyebrow"><span></span>Western United States</p>
-          <h1>Burn-scar flash flood warnings</h1>
-          <p class="lead">
-            Track current warnings and explore the NWS issuance archive across
-            33 forecast offices.
+      <header class="masthead">
+        <div class="mast-top">
+          <a
+            class="archive-badge"
+            href="https://mesonet.agron.iastate.edu/vtec/"
+            target="_blank"
+            rel="noopener"
+            ><i></i>IEM VTEC &amp; AFOS archive
+            <svg class="icon"><use href="#i-link" /></svg
+          ></a>
+          <button id="method-open" class="guide-btn" type="button">
+            <svg class="icon"><use href="#i-info" /></svg>Methodology
+          </button>
+        </div>
+        <h1>
+          Western U.S. Burn-Scar Flash Flood Warning <span>Explorer</span>
+        </h1>
+        <div class="mast-meta">
+          <p>
+            Initial NWS flash flood warnings <b>·</b> Post-fire warning text
+            <b>·</b> <span id="stat-range">Since Nov 2005</span>
+          </p>
+          <p class="stamp">
+            <span>IEM checked</span> <time id="last-sync-badge">Loading…</time>
           </p>
         </div>
-        <div class="stamp">
-          <svg class="icon"><use href="#i-clock" /></svg>
-          <div>
-            <span>Archive checked</span
-            ><time id="last-sync-badge">Loading…</time>
+        <section class="metrics" aria-label="Regional warning statistics">
+          <article class="metric coverage">
+            <div class="metric-label">Western WFO coverage</div>
+            <strong
+              ><span id="stat-offices">—</span> <small>offices</small></strong
+            ><span><b id="stat-total">—</b> verified warnings</span>
+          </article>
+          <article class="metric hotspots">
+            <div class="metric-label">Signature hotspots</div>
+            <strong
+              ><span id="stat-hotspots">—</span> <small>WFOs</small></strong
+            ><span>≥30 warnings per office</span>
+          </article>
+          <article class="metric season-metric">
+            <div class="metric-label">Seasonal windows</div>
+            <strong><em>Jul–Sep</em><i>/</i><em>Oct–Mar</em></strong
+            ><span>Monsoon &amp; cool season</span>
+          </article>
+          <article class="metric source-metric">
+            <div class="metric-label">Feed status</div>
+            <strong id="archive-status" data-state="loading"
+              ><i></i><span>Loading archive</span></strong
+            ><span
+              ><b id="stat-active">—</b> active <b class="status-sep">·</b>
+              <span id="active-status" role="status">Checking NWS…</span></span
+            >
+          </article>
+        </section>
+        <div class="filter-strip">
+          <nav
+            id="region-filters"
+            class="region-filters"
+            aria-label="Filter by forecast region"
+          >
+            <button type="button" data-region="all" aria-pressed="true">
+              All Western U.S.
+              <span class="region-count" data-count="all">33</span>
+            </button>
+            <button type="button" data-region="southwest" aria-pressed="false">
+              Southwest Monsoon
+              <span class="region-count" data-count="southwest"></span>
+            </button>
+            <button type="button" data-region="rockies" aria-pressed="false">
+              Southern &amp; Central Rockies
+              <span class="region-count" data-count="rockies"></span>
+            </button>
+            <button type="button" data-region="california" aria-pressed="false">
+              California &amp; Great Basin
+              <span class="region-count" data-count="california"></span>
+            </button>
+            <button type="button" data-region="northwest" aria-pressed="false">
+              Pacific Northwest
+              <span class="region-count" data-count="northwest"></span>
+            </button>
+          </nav>
+          <div class="query-line">
+            <span>VTEC filter</span><code>/O.NEW.K***.FF.W./</code><span>+</span
+            ><code>Post-fire wording</code>
           </div>
         </div>
-      </section>
-      <section class="metrics" aria-label="Tracker totals">
-        <article>
-          <div class="metric-label">
-            <svg class="icon"><use href="#i-stack" /></svg>Verified warnings
-          </div>
-          <strong id="stat-total" class="amber">—</strong
-          ><small>Unique initial issuances</small>
-        </article>
-        <article>
-          <div class="metric-label">
-            <svg class="icon"><use href="#i-pin" /></svg>Forecast offices
-          </div>
-          <strong id="stat-offices">33</strong
-          ><small>Western U.S. coverage</small>
-        </article>
-        <article>
-          <div class="metric-label">
-            <svg class="icon"><use href="#i-calendar" /></svg>Archive period
-          </div>
-          <strong id="stat-range" class="range">—</strong
-          ><small id="period-sub">From November 2005</small>
-        </article>
-        <article>
-          <div class="metric-label">
-            <svg class="icon"><use href="#i-radio" /></svg>Active warnings
-          </div>
-          <strong id="stat-active">—</strong
-          ><small id="active-status" role="status">Checking NWS…</small>
-        </article>
-      </section>
+        <nav class="mobile-jump" aria-label="Jump to dashboard panels">
+          <a href="#map-stage">Warning map ↓</a
+          ><a href="#analytics">Heat map &amp; tables ↓</a>
+        </nav>
+      </header>
       <p id="archive-error" class="notice" role="status" hidden></p>
       <div class="workspace-grid">
-        <section class="panel map-panel" aria-labelledby="map-heading">
-          <div class="panel-header">
-            <div class="heading-wrap">
-              <span class="section-icon"
-                ><svg class="icon"><use href="#i-map" /></svg
-              ></span>
-              <h2 id="map-heading">Warning map</h2>
+        <section class="map-panel" aria-labelledby="map-heading">
+          <h2 id="map-heading" class="visually-hidden">Warning map</h2>
+          <div class="map-stage" id="map-stage">
+            <div
+              id="map"
+              aria-label="Interactive map of warning footprints and forecast offices"
+            >
+              <noscript
+                >Enable JavaScript to view the interactive map.</noscript
+              >
             </div>
-            <div class="map-actions">
-              <label class="select-wrap"
-                ><span class="visually-hidden">Basemap</span
-                ><select id="basemap">
+            <div class="map-tools" role="group" aria-label="Map controls">
+              <button
+                type="button"
+                id="map-reset"
+                class="map-button"
+                title="Reset region and map extent"
+              >
+                <svg class="icon"><use href="#i-expand" /></svg>Reset Western
+                U.S.
+              </button>
+              <label class="map-toggle"
+                ><input id="toggle-labels" type="checkbox" checked /><i></i>WFO
+                labels <b></b
+              ></label>
+              <label class="map-toggle"
+                ><input id="toggle-borders" type="checkbox" checked /><i></i
+                >State borders <b></b
+              ></label>
+              <label class="map-toggle"
+                ><input id="toggle-archive" type="checkbox" checked /><i></i
+                >Warning polygons <b></b
+              ></label>
+            </div>
+            <details class="layer-menu" id="layer-menu">
+              <summary
+                title="Basemap and layers"
+                aria-label="Basemap and layers"
+              >
+                <svg class="icon"><use href="#i-stack" /></svg>
+              </summary>
+              <div class="layer-options">
+                <label for="basemap">Basemap</label>
+                <select id="basemap">
                   <option value="dark">Dark gray</option>
                   <option value="topo">World topo</option>
                   <option value="imagery">Satellite</option>
-                  <option value="osm">OpenStreetMap</option></select
-                ><svg class="icon"><use href="#i-chevron" /></svg
-              ></label>
-              <button
-                type="button"
-                class="icon-btn"
-                id="map-reset"
-                title="Reset to western U.S. extent"
-                aria-label="Reset to western U.S. extent"
-              >
-                <svg class="icon"><use href="#i-expand" /></svg>
-              </button>
-            </div>
-          </div>
-          <div
-            id="map"
-            aria-label="Interactive map of forecast offices and warning polygons"
-          >
-            <noscript>Enable JavaScript to view the interactive map.</noscript>
-          </div>
-          <div class="map-legend" aria-label="Map layers">
-            <label
-              ><input id="toggle-archive" type="checkbox" checked /><i
-                class="key archived"
-              ></i
-              >Archived warning</label
-            ><label
-              ><input id="toggle-offices" type="checkbox" checked /><i
-                class="key office"
-              ></i
-              >WFO</label
-            ><label
-              ><input id="toggle-active" type="checkbox" checked /><i
-                class="key active"
-              ></i
-              >Active warning</label
-            >
+                  <option value="osm">OpenStreetMap</option>
+                </select>
+                <label
+                  ><input type="checkbox" id="toggle-offices" checked /> WFO
+                  markers</label
+                >
+                <label id="places-option"
+                  ><input type="checkbox" id="toggle-places" checked /> City
+                  &amp; place names</label
+                >
+              </div>
+            </details>
+            <details class="map-key" id="map-key" open>
+              <summary>
+                <span><i class="key-symbol"></i>WFO warning activity</span
+                ><span id="legend-years"></span
+                ><span id="map-position" aria-hidden="true"></span
+                ><svg class="icon"><use href="#i-chevron" /></svg>
+              </summary>
+              <div class="key-content">
+                <div
+                  id="office-tiers"
+                  class="office-tiers"
+                  aria-label="Office warning total tiers"
+                ></div>
+                <div
+                  id="season-layers"
+                  class="season-layers"
+                  role="group"
+                  aria-label="Archived polygons by issuance month"
+                ></div>
+              </div>
+            </details>
           </div>
           <div class="map-note">
-            <span id="mapped-count">Loading polygons…</span
-            ><button type="button" class="text-btn" id="coverage-info">
+            <span
+              ><span id="mapped-count" role="status">Loading polygons…</span
+              ><small id="tile-status" hidden>
+                · Local terrain basemap</small
+              ></span
+            ><button id="coverage-info" class="text-btn" type="button">
               Coverage notes
             </button>
           </div>
         </section>
-        <section class="panel analysis" aria-labelledby="analytics-heading">
+        <section class="analysis" id="analytics" aria-label="Warning analytics">
           <div id="active-banner" class="alert-banner" hidden></div>
-          <div class="panel-header">
-            <div class="heading-wrap">
-              <span class="section-icon"
-                ><svg class="icon"><use href="#i-table" /></svg
-              ></span>
-              <h2 id="analytics-heading">Warning analytics</h2>
-            </div>
-          </div>
           <div class="tabs" role="tablist" aria-label="Analysis views">
-            <button
-              id="tab-wfo"
-              role="tab"
-              aria-selected="true"
-              aria-controls="panel-wfo"
-              data-view="wfo"
-            >
-              WFO breakdown
-            </button>
             <button
               id="tab-heat"
               role="tab"
-              aria-selected="false"
+              aria-selected="true"
               aria-controls="panel-heat"
-              tabindex="-1"
               data-view="heat"
             >
-              Heatmap
+              <svg class="icon"><use href="#i-grid" /></svg>Heat map
+            </button>
+            <button
+              id="tab-wfo"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-wfo"
+              tabindex="-1"
+              data-view="wfo"
+            >
+              <svg class="icon"><use href="#i-table" /></svg>WFO breakdown
             </button>
             <button
               id="tab-recent"
@@ -249,14 +277,78 @@
               tabindex="-1"
               data-view="recent"
             >
-              Recent events
+              <svg class="icon"><use href="#i-list" /></svg>Recent events
             </button>
           </div>
           <div
-            class="tab-panel"
+            class="tab-panel heat-panel"
+            id="panel-heat"
             role="tabpanel"
+            aria-labelledby="tab-heat"
+          >
+            <div
+              class="period-switch"
+              role="group"
+              aria-label="Heat map period"
+            >
+              <button type="button" id="heat-month" aria-pressed="true">
+                Region / WFO × Month <small>Jan–Dec</small>
+              </button>
+              <button type="button" id="heat-year" aria-pressed="false">
+                Region / WFO × Year <small id="annual-range">Since 2015</small>
+              </button>
+            </div>
+            <div class="heat-controls">
+              <div
+                class="heat-ramp"
+                id="heat-ramp"
+                aria-label="Heat map intensity scale"
+              ></div>
+              <div
+                class="unit-switch"
+                role="group"
+                aria-label="Heat map values"
+              >
+                <button type="button" id="unit-count" aria-pressed="true">
+                  Count</button
+                ><button type="button" id="unit-share" aria-pressed="false">
+                  Share %
+                </button>
+              </div>
+            </div>
+            <div id="heat-readout" class="heat-readout">
+              <strong id="heat-detail-title"
+                >Seasonal &amp; multi-year heat map</strong
+              ><span id="heat-detail-body"
+                >Select a cell for details or an office to locate it on the
+                map.</span
+              >
+            </div>
+            <div
+              class="table-scroll heat-scroll"
+              id="heat-table"
+              tabindex="0"
+              aria-label="Scrollable regional and WFO heat map"
+            ></div>
+            <div class="season-cards">
+              <article class="season-card summer">
+                <div><i></i>Jul–Sep <span>Monsoon window</span></div>
+                <p id="summer-share">—</p>
+                <p class="season-leaders" id="summer-leaders"></p>
+              </article>
+              <article class="season-card cool">
+                <div><i></i>Oct–Mar <span>Cool-season window</span></div>
+                <p id="cool-share">—</p>
+                <p class="season-leaders" id="cool-leaders"></p>
+              </article>
+            </div>
+          </div>
+          <div
+            class="tab-panel"
             id="panel-wfo"
+            role="tabpanel"
             aria-labelledby="tab-wfo"
+            hidden
           >
             <label class="search"
               ><svg class="icon"><use href="#i-search" /></svg
@@ -305,9 +397,19 @@
             <div class="drawer-footer">
               <span id="office-count" role="status">Loading offices…</span>
               <div class="export">
-                <button id="export-csv" class="small-btn" disabled>
+                <button
+                  id="export-csv"
+                  class="small-btn"
+                  title="Export the displayed offices"
+                  disabled
+                >
                   <svg class="icon"><use href="#i-download" /></svg>CSV</button
-                ><button id="export-geo" class="small-btn" disabled>
+                ><button
+                  id="export-geo"
+                  class="small-btn"
+                  title="Export warnings from the displayed offices"
+                  disabled
+                >
                   <svg class="icon"><use href="#i-download" /></svg>GeoJSON
                 </button>
               </div>
@@ -315,31 +417,8 @@
           </div>
           <div
             class="tab-panel"
-            role="tabpanel"
-            id="panel-heat"
-            aria-labelledby="tab-heat"
-            hidden
-          >
-            <div class="heat-options">
-              <div class="switch" aria-label="Heatmap period">
-                <button type="button" id="heat-month" aria-pressed="true">
-                  Monthly</button
-                ><button type="button" id="heat-year" aria-pressed="false">
-                  Annual
-                </button>
-              </div>
-              <span id="heat-unit">Warnings</span>
-            </div>
-            <div class="table-scroll heat-scroll" id="heat-table"></div>
-            <div class="drawer-footer heat-footer">
-              <span id="heat-caption"></span
-              ><span class="heat-ramp">Low <i></i> High</span>
-            </div>
-          </div>
-          <div
-            class="tab-panel"
-            role="tabpanel"
             id="panel-recent"
+            role="tabpanel"
             aria-labelledby="tab-recent"
             hidden
           >
@@ -354,14 +433,8 @@
         </section>
       </div>
       <footer>
-        <div>
-          <svg class="icon"><use href="#i-info" /></svg
-          ><span
-            >Archive: Iowa Environmental Mesonet <b>·</b> Active alerts:
-            National Weather Service</span
-          >
-        </div>
-        <a href="https://www.weather.gov/alerts" target="_blank" rel="noopener"
+        <span>Warning archive · Iowa Environmental Mesonet</span
+        ><a href="https://www.weather.gov/alerts" target="_blank" rel="noopener"
           >Official NWS alerts <svg class="icon"><use href="#i-link" /></svg
         ></a>
       </footer>
@@ -388,11 +461,11 @@
       </p>
       <h3>What does the map show?</h3>
       <p>
-        Amber shapes show the initial NWS warning footprint. A burn-scar
-        perimeter may cover a different area. If the initial IEM polygon is
-        unavailable, the tracker uses coordinates printed in that warning. A
-        text-verified warning with no usable shape still contributes to its
-        office total.
+        Polygons show the initial NWS warning footprint and are colored by
+        issuance month. A burn-scar perimeter may cover a different area. If the
+        initial IEM polygon is unavailable, the tracker uses coordinates printed
+        in that warning. A text-verified warning with no usable shape still
+        contributes to its office total.
       </p>
       <h3>How far back can I compare offices?</h3>
       <p>
@@ -405,9 +478,12 @@
       <p>
         Peak season is the three consecutive calendar months with the most
         archived warnings for an office. Ties share the peak. This describes
-        issuance timing. Monthly cells sum all archive years; annual cells start
+        issuance timing. Monthly cells sum all archive years. Annual cells start
         in 2015 and the current year is partial. Burn names come from the
-        warning text and some remain unspecified.
+        warning text and some remain unspecified. Heatmap shares use each row’s
+        full archive total. The seasonal windows compare calendar months.
+        Determining the storm mechanism requires a review of the individual
+        event.
       </p>
       <h3>How current is the tracker?</h3>
       <p>
