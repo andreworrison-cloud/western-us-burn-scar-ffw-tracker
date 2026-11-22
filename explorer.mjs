@@ -79,3 +79,83 @@ export function heatBand(count, share, asShare) {
   const thresholds = asShare ? [5, 10, 20, 30] : [5, 15, 30, 60];
   return 1 + thresholds.filter((limit) => value >= limit).length;
 }
+
+// These notes describe seasonal weather settings. Individual event mechanisms
+// require review of the warning and meteorological evidence.
+function weatherSetting(scope, season) {
+  if (season === "summer") {
+    if (
+      ["all", "Southwest Monsoon", "ABQ", "FGZ", "PSR", "TWC", "EPZ"].includes(
+        scope,
+      )
+    )
+      return "Monsoon moisture can fuel short, intense thunderstorms over burn scars in the Southwest.";
+    return "A slow-moving thunderstorm can concentrate intense rain over a single burned watershed.";
+  }
+  if (
+    season === "cool" &&
+    [
+      "all",
+      "California & Great Basin",
+      "Pacific Northwest",
+      "LOX",
+      "SGX",
+      "MTR",
+      "STO",
+      "HNX",
+      "EKA",
+      "SEW",
+      "PQR",
+      "MFR",
+    ].includes(scope)
+  )
+    return "On the West Coast, atmospheric rivers supply moisture and frontal rainbands can focus heavy rain.";
+  return "Short bursts of intense rain from thunderstorms or bands within a larger storm can produce runoff on burned slopes.";
+}
+
+export function describeHeatPeriod(
+  features,
+  scope,
+  monthly,
+  period,
+  monthLabels,
+) {
+  const histogram = Array(12).fill(0);
+  let latest = null;
+  for (const { properties: event } of features) {
+    if (scope !== "all" && scope !== event.wfo && scope !== event.region)
+      continue;
+    if ((monthly ? event.month : event.year) !== period) continue;
+    histogram[event.month - 1]++;
+    if (!latest || event.issued_utc > latest.issued_utc) latest = event;
+  }
+  if (!latest) return { latest: null, context: "" };
+  if (monthly)
+    return {
+      latest,
+      context:
+        "Seasonal context · " +
+        weatherSetting(scope, seasonForMonth(period).id),
+    };
+
+  const peak = Math.max(...histogram);
+  const months = histogram.flatMap((count, index) =>
+    count === peak ? [index + 1] : [],
+  );
+  const labels = months.map((month) => monthLabels[month - 1]).join(", ");
+  const peakSeasons = new Set(months.map((month) => seasonForMonth(month).id));
+  const setting =
+    peakSeasons.size === 1
+      ? " Seasonal context · " +
+        weatherSetting(scope, seasonForMonth(months[0]).id)
+      : " Those months span more than one seasonal window.";
+  const peakText =
+    (months.length === 1 ? "Busiest month" : "Tied busiest months") +
+    " · " +
+    labels +
+    " (" +
+    peak +
+    (peak === 1 ? " warning" : " warnings") +
+    (months.length > 1 ? " each)." : ").");
+  return { latest, context: peakText + setting };
+}

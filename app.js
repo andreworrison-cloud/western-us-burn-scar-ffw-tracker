@@ -8,7 +8,8 @@ import {
   hotspotMinimum,
   aggregate,
   heatBand,
-} from "./explorer.mjs";
+  describeHeatPeriod,
+} from "./explorer.mjs?v=map3";
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
@@ -48,6 +49,8 @@ const state = {
   heat: "month",
   asShare: false,
   region: "all",
+  basemap: "dark",
+  view: "wfo",
   scopeRows: [],
   scopeFeatures: [],
   limit: 16,
@@ -73,7 +76,6 @@ let archiveRenderer,
   activeRenderer,
   map,
   baseLayer,
-  baseVersion = 0,
   officeGroup,
   historyGroup,
   liveGroup,
@@ -180,11 +182,16 @@ const sources = {
   ],
   osm: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png", osm, 1, 19],
 };
-function selectBasemap() {
-  const id = $("basemap").value,
-    [url, attribution, opacity, maxNativeZoom] = sources[id];
+function selectBasemap(id, writeUrl = true) {
+  const radio = document.querySelector(
+    'input[name="basemap"][value="' + id + '"]',
+  );
+  radio.checked = true;
+  state.basemap = id;
+  if (writeUrl) writePageSettings();
+  if (!map) return;
+  const [url, attribution, opacity, maxNativeZoom] = sources[id];
   if (baseLayer) map.removeLayer(baseLayer);
-  const version = ++baseVersion;
   $("map").dataset.basemap = id;
   $("tile-status").hidden = true;
   $("places-option").hidden = id !== "dark";
@@ -200,7 +207,7 @@ function selectBasemap() {
       },
     );
   setLayer(map, placeLayer, id === "dark" && $("toggle-places").checked);
-  baseLayer = L.tileLayer(url, {
+  const layer = L.tileLayer(url, {
     pane: "tiles",
     maxNativeZoom,
     maxZoom: 19,
@@ -208,17 +215,25 @@ function selectBasemap() {
     opacity,
     updateWhenIdle: true,
     keepBuffer: 1,
-  }).addTo(map);
-  let valid = 0,
-    failed = 0;
-  baseLayer.on("tileload", () => {
-    valid++;
-    if (version === baseVersion && valid === 1) $("tile-status").hidden = true;
   });
-  baseLayer.on("tileerror", () => {
-    if (++failed > 2 && !valid && version === baseVersion)
-      $("tile-status").hidden = false;
+  baseLayer = layer;
+  let missing = false;
+  layer.on("loading", () => {
+    missing = false;
   });
+  layer.on("tileerror", () => {
+    if (baseLayer !== layer) return;
+    missing = true;
+    $("tile-status").textContent =
+      " · " +
+      radio.labels[0].textContent.trim() +
+      " tiles unavailable here. Local terrain fills gaps.";
+    $("tile-status").hidden = false;
+  });
+  layer.on("load", () => {
+    if (baseLayer === layer) $("tile-status").hidden = !missing;
+  });
+  layer.addTo(map);
 }
 function setupMap() {
   if (!window.L) {
@@ -273,7 +288,7 @@ function setupMap() {
       attribution: "Terrain: Natural Earth",
     },
   ).addTo(map);
-  selectBasemap();
+  selectBasemap(state.basemap, false);
   L.control.zoom({ position: "topright" }).addTo(map);
   L.control
     .scale({
@@ -290,10 +305,6 @@ function setupMap() {
   labelGroup = L.layerGroup().addTo(map);
   archiveRenderer = L.canvas({ pane: "scarPolygons", padding: 0.25 });
   $("map-reset").addEventListener("click", () => selectRegion("all"));
-  $("basemap").addEventListener("change", () => {
-    selectBasemap();
-    $("layer-menu").open = false;
-  });
   for (const id of [
     "toggle-archive",
     "toggle-offices",
@@ -333,7 +344,7 @@ function setupMap() {
     setLayer(
       map,
       placeLayer,
-      $("basemap").value === "dark" && $("toggle-places").checked,
+      state.basemap === "dark" && $("toggle-places").checked,
     );
   });
   const coordinates = (point) => {
@@ -479,6 +490,9 @@ function buildMapLayers() {
           fmt(r.total_ffw) + " verified warnings · " + tier.label + " activity",
           r.total_ffw ? "Peak season · " + r.peak_season : "",
           r.top_scars ? "Frequently named burns · " + r.top_scars : "",
+          r.latest_issued_utc
+            ? "Latest warning · " + dateText(r.latest_issued_utc)
+            : "",
         ]),
       { maxWidth: 285, autoPan: false },
     );
@@ -632,9 +646,31 @@ function renderTable() {
   $("export-csv").disabled = !rows.length;
   $("export-geo").disabled = !rows.length;
 }
-function regionFromUrl() {
-  const key = new URLSearchParams(location.search).get("region");
-  return regions.some((region) => region.id === key) ? key : "all";
+const defaultView = (region) => (region === "all" ? "wfo" : "heat");
+function readPageSettings() {
+  const params = new URLSearchParams(location.search);
+  const region =
+    regions.find((r) => r.id === params.get("region"))?.id || "all";
+  const view = params.get("view");
+  const basemap = params.get("basemap");
+  return {
+    region,
+    view: ["wfo", "heat", "recent"].includes(view) ? view : defaultView(region),
+    basemap: Object.hasOwn(sources, basemap) ? basemap : "dark",
+  };
+}
+function writePageSettings() {
+  if (!["https:", "http:"].includes(location.protocol)) return;
+  const url = new URL(location.href);
+  for (const [key, fallback] of [
+    ["region", "all"],
+    ["basemap", "dark"],
+    ["view", defaultView(state.region)],
+  ]) {
+    if (state[key] === fallback) url.searchParams.delete(key);
+    else url.searchParams.set(key, state[key]);
+  }
+  if (url.href !== location.href) history.pushState(null, "", url);
 }
 function selectRegion(id, writeUrl = true) {
   if (id !== "all" && !regions.some((r) => r.id === id)) return;
@@ -642,12 +678,7 @@ function selectRegion(id, writeUrl = true) {
   state.selected = null;
   state.limit = 16;
   $("search").value = "";
-  if (writeUrl && ["https:", "http:"].includes(location.protocol)) {
-    const url = new URL(location.href);
-    if (id === "all") url.searchParams.delete("region");
-    else url.searchParams.set("region", id);
-    if (url.href !== location.href) history.pushState(null, "", url);
-  }
+  if (writeUrl) writePageSettings();
   map?.closePopup();
   refreshScope();
   fitRegion();
@@ -755,6 +786,8 @@ function heatDataRow(body, rowData, options) {
     value.type = "button";
     value.tabIndex = -1;
     value.dataset.col = String(i);
+    value.dataset.scope = code || options.scope || "all";
+    value.dataset.period = monthly ? i + 1 : col;
     value.dataset.heading = label + " · " + col;
     value.dataset.detail =
       fmt(n) +
@@ -763,12 +796,11 @@ function heatDataRow(body, rowData, options) {
       percent(share) +
       " of " +
       fmt(rowData.total_ffw) +
-      " in this row’s full archive";
+      " archived";
     if (!rowData.total_ffw)
       value.dataset.detail =
         "0 verified warnings in the full archive. A percentage is unavailable.";
-    if (monthly)
-      value.dataset.detail += " · " + seasonForMonth(i + 1).label + " window";
+    if (monthly) value.dataset.detail += " · " + seasonForMonth(i + 1).label;
     value.setAttribute(
       "aria-label",
       value.dataset.heading + ". " + value.dataset.detail,
@@ -776,13 +808,41 @@ function heatDataRow(body, rowData, options) {
     td.append(value);
   });
 }
+let pinnedHeatCell = null;
+function releaseHeatCell() {
+  pinnedHeatCell = null;
+  $("heat-unpin").hidden = true;
+  $("heat-example").parentElement.hidden = $("heat-example").hidden;
+}
 function showHeatCell(button) {
   const table = $("heat-table");
   const previous = table.querySelector(".heat-value.picked");
-  if (previous !== button) previous?.classList.remove("picked");
+  if (previous === button) return;
+  previous?.classList.remove("picked");
   button.classList.add("picked");
   $("heat-detail-title").textContent = button.dataset.heading;
   $("heat-detail-body").textContent = button.dataset.detail;
+  const { latest, context } = describeHeatPeriod(
+    state.scopeFeatures,
+    button.dataset.scope,
+    state.heat === "month",
+    Number(button.dataset.period),
+    months,
+  );
+  const weather = $("heat-weather"),
+    example = $("heat-example");
+  weather.textContent = context;
+  weather.hidden = !context;
+  example.hidden = !latest;
+  if (latest) {
+    example.href = latest.vtec_url;
+    example.textContent =
+      "Latest warning · " +
+      latest.wfo +
+      " · " +
+      dateFmt.format(new Date(latest.issued_utc));
+  } else example.removeAttribute("href");
+  example.parentElement.hidden = !latest && !pinnedHeatCell;
 }
 function renderHeat() {
   const monthly = state.heat === "month",
@@ -804,6 +864,10 @@ function renderHeat() {
     ramp.append(swatch);
   });
   if (!state.meta || !columns.length) return;
+  releaseHeatCell();
+  $("heat-weather").hidden = true;
+  $("heat-example").hidden = true;
+  $("heat-example").parentElement.hidden = true;
   const total = aggregate(state.scopeRows, state.years);
   const extent = monthly
     ? $("stat-range").textContent
@@ -813,8 +877,8 @@ function renderHeat() {
     ? "Seasonal heat map · " + extent
     : "Annual heat map · " + extent;
   $("heat-detail-body").textContent = monthly
-    ? "Select a cell for its share or an office to locate it on the map."
-    : "Select a cell for its share of all archive years. The current year is partial.";
+    ? "Hover or select a cell for its share, seasonal weather context and latest warning. Click to pin."
+    : "Explore each year’s warning share and busiest months. Click to pin. The current year is partial.";
   for (const id of ["summer", "cool"]) {
     const season = seasons.find((s) => s.id === id);
     const windowCount = (row) =>
@@ -859,6 +923,7 @@ function renderHeat() {
     const rows = state.scopeRows.filter((r) => r.region === region.name);
     heatDataRow(body, aggregate(rows, state.years), {
       label: region.short,
+      scope: region.name,
       select: () => selectRegion(region.id),
       columns,
       monthly,
@@ -900,8 +965,17 @@ function renderHeat() {
     }
   }
   $("heat-table").replaceChildren(t);
-  const first = t.querySelector(".heat-value");
-  if (first) first.tabIndex = 0;
+  const latest = state.scopeFeatures[0]?.properties;
+  const scope = selectedRegion()?.name || "all";
+  const period = monthly ? latest?.month : latest?.year;
+  const initial =
+    t.querySelector(
+      '.heat-value[data-scope="' + scope + '"][data-period="' + period + '"]',
+    ) || t.querySelector(".heat-value");
+  if (initial) {
+    initial.tabIndex = 0;
+    showHeatCell(initial);
+  }
 }
 function renderFeed() {
   const rows = state.scopeFeatures,
@@ -939,7 +1013,9 @@ function renderFeed() {
     "Showing " + Math.min(state.limit, rows.length) + " of " + fmt(rows.length);
   $("feed-more").hidden = state.limit >= rows.length;
 }
-function tabView(name) {
+function tabView(name, writeUrl = true) {
+  state.view = name;
+  if (writeUrl) writePageSettings();
   document.querySelectorAll("[role=tab]").forEach((b) => {
     const on = b.dataset.view === name;
     b.setAttribute("aria-selected", on);
@@ -1155,6 +1231,10 @@ function showActive(alerts, failed = false) {
           : "NWS live status unavailable. ",
       ),
     );
+  let openWarning;
+  liveGroup?.eachLayer((layer) => {
+    if (layer.isPopupOpen()) openWarning = layer.options.warningKey;
+  });
   liveGroup?.clearLayers();
   if (inRegion.length) {
     banner.append(
@@ -1172,6 +1252,7 @@ function showActive(alerts, failed = false) {
         if (!activeRenderer) activeRenderer = L.svg({ pane: "live" });
         layer = L.geoJSON(a.geometry, {
           pane: "live",
+          warningKey: a.key,
           style: {
             pane: "live",
             renderer: activeRenderer,
@@ -1191,6 +1272,7 @@ function showActive(alerts, failed = false) {
             return box;
           })
           .addTo(liveGroup);
+        if (a.key === openWarning) layer.openPopup();
       }
       if (i) banner.append(document.createTextNode(" · "));
       if (layer) {
@@ -1310,12 +1392,30 @@ for (const unit of ["count", "share"])
   });
 for (const button of document.querySelectorAll("[data-region]"))
   button.addEventListener("click", () => selectRegion(button.dataset.region));
-addEventListener("popstate", () => selectRegion(regionFromUrl(), false));
+for (const radio of document.querySelectorAll('input[name="basemap"]'))
+  radio.addEventListener("change", () => selectBasemap(radio.value));
+addEventListener("popstate", () => {
+  const { region, view, basemap } = readPageSettings();
+  if (region !== state.region) selectRegion(region, false);
+  if (basemap !== state.basemap) selectBasemap(basemap, false);
+  if (view !== state.view) tabView(view, false);
+});
 const heatTable = $("heat-table");
+$("heat-unpin").addEventListener("click", () => {
+  pinnedHeatCell?.focus();
+  releaseHeatCell();
+});
 for (const type of ["pointerover", "focusin", "click"])
   heatTable.addEventListener(type, (event) => {
     const cell = event.target.closest(".heat-value");
     if (!cell) return;
+    if (type === "pointerover" && pinnedHeatCell) return;
+    if (type === "focusin" && pinnedHeatCell !== cell) releaseHeatCell();
+    if (type === "click") {
+      pinnedHeatCell = cell;
+      $("heat-unpin").hidden = false;
+      $("heat-unpin").parentElement.hidden = false;
+    }
     showHeatCell(cell);
     if (type !== "pointerover") {
       const old = heatTable.querySelector('.heat-value[tabindex="0"]');
@@ -1323,6 +1423,12 @@ for (const type of ["pointerover", "focusin", "click"])
       cell.tabIndex = 0;
     }
   });
+$("panel-heat").addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && pinnedHeatCell) {
+    pinnedHeatCell.focus();
+    releaseHeatCell();
+  }
+});
 heatTable.addEventListener("keydown", (event) => {
   const cell = event.target.closest(".heat-value");
   if (
@@ -1379,7 +1485,8 @@ $("method-dialog").addEventListener("click", (e) => {
       e.target.close();
   }
 });
-state.region = regionFromUrl();
+Object.assign(state, readPageSettings());
+tabView(state.view, false);
 setupLegend();
 setupMap();
 refreshScope();

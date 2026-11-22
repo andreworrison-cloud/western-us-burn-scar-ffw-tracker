@@ -11,9 +11,9 @@
     <title>Western U.S. Burn-Scar Flash Flood Warning Explorer</title>
     <link rel="icon" href="./assets/mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="./styles.css?v=explorer2" />
+    <link rel="stylesheet" href="./styles.css?v=map3" />
     <script defer src="./vendor/leaflet/leaflet.js"></script>
-    <script type="module" src="./app.js?v=explorer2"></script>
+    <script type="module" src="./app.js?v=map3"></script>
   </head>
   <body>
     <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -149,14 +149,46 @@
           </div>
         </div>
         <nav class="mobile-jump" aria-label="Jump to dashboard panels">
-          <a href="#map-stage">Warning map ↓</a
+          <a href="#map-panel">Warning map ↓</a
           ><a href="#analytics">Heat map &amp; tables ↓</a>
         </nav>
       </header>
       <p id="archive-error" class="notice" role="status" hidden></p>
       <div class="workspace-grid">
-        <section class="map-panel" aria-labelledby="map-heading">
+        <section class="map-panel" id="map-panel" aria-labelledby="map-heading">
           <h2 id="map-heading" class="visually-hidden">Warning map</h2>
+          <div
+            class="background-bar"
+            role="radiogroup"
+            aria-labelledby="background-label"
+          >
+            <span id="background-label"
+              ><svg class="icon" aria-hidden="true"><use href="#i-stack" /></svg
+              >Map background</span
+            >
+            <div class="background-choices">
+              <label title="Esri Dark Gray Canvas"
+                ><input type="radio" name="basemap" value="dark" checked /><span
+                  >Dark Gray</span
+                ></label
+              >
+              <label title="Esri World Topographic Map"
+                ><input type="radio" name="basemap" value="topo" /><span
+                  >Topographic</span
+                ></label
+              >
+              <label title="Esri World Imagery"
+                ><input type="radio" name="basemap" value="imagery" /><span
+                  >Satellite</span
+                ></label
+              >
+              <label title="OpenStreetMap street map"
+                ><input type="radio" name="basemap" value="osm" /><span
+                  >OpenStreetMap</span
+                ></label
+              >
+            </div>
+          </div>
           <div class="map-stage" id="map-stage">
             <div
               id="map"
@@ -190,20 +222,12 @@
               ></label>
             </div>
             <details class="layer-menu" id="layer-menu">
-              <summary
-                title="Basemap and layers"
-                aria-label="Basemap and layers"
-              >
-                <svg class="icon"><use href="#i-stack" /></svg>
+              <summary title="Map overlays">
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-stack" /></svg
+                >Overlays
               </summary>
               <div class="layer-options">
-                <label for="basemap">Basemap</label>
-                <select id="basemap">
-                  <option value="dark">Dark gray</option>
-                  <option value="topo">World topo</option>
-                  <option value="imagery">Satellite</option>
-                  <option value="osm">OpenStreetMap</option>
-                </select>
                 <label
                   ><input type="checkbox" id="toggle-offices" checked /> WFO
                   markers</label
@@ -239,9 +263,7 @@
           <div class="map-note">
             <span
               ><span id="mapped-count" role="status">Loading polygons…</span
-              ><small id="tile-status" hidden>
-                · Local terrain basemap</small
-              ></span
+              ><small id="tile-status" role="status" hidden></small></span
             ><button id="coverage-info" class="text-btn" type="button">
               Coverage notes
             </button>
@@ -253,8 +275,9 @@
             <button
               id="tab-heat"
               role="tab"
-              aria-selected="true"
+              aria-selected="false"
               aria-controls="panel-heat"
+              tabindex="-1"
               data-view="heat"
             >
               <svg class="icon"><use href="#i-grid" /></svg>Heat map
@@ -262,9 +285,8 @@
             <button
               id="tab-wfo"
               role="tab"
-              aria-selected="false"
+              aria-selected="true"
               aria-controls="panel-wfo"
-              tabindex="-1"
               data-view="wfo"
             >
               <svg class="icon"><use href="#i-table" /></svg>WFO breakdown
@@ -285,6 +307,7 @@
             id="panel-heat"
             role="tabpanel"
             aria-labelledby="tab-heat"
+            hidden
           >
             <div
               class="period-switch"
@@ -320,9 +343,15 @@
               <strong id="heat-detail-title"
                 >Seasonal &amp; multi-year heat map</strong
               ><span id="heat-detail-body"
-                >Select a cell for details or an office to locate it on the
-                map.</span
+                >Hover or select a cell for its warning share and seasonal
+                weather context.</span
               >
+              <span id="heat-weather" hidden></span>
+              <div class="heat-links" hidden>
+                <a id="heat-example" target="_blank" rel="noopener" hidden></a>
+                <span class="heat-hint">Click a cell to pin</span>
+                <button id="heat-unpin" type="button" hidden>Unpin cell</button>
+              </div>
             </div>
             <div
               class="table-scroll heat-scroll"
@@ -348,7 +377,6 @@
             id="panel-wfo"
             role="tabpanel"
             aria-labelledby="tab-wfo"
-            hidden
           >
             <label class="search"
               ><svg class="icon"><use href="#i-search" /></svg
@@ -481,9 +509,36 @@
         issuance timing. Monthly cells sum all archive years. Annual cells start
         in 2015 and the current year is partial. Burn names come from the
         warning text and some remain unspecified. Heatmap shares use each row’s
-        full archive total. The seasonal windows compare calendar months.
-        Determining the storm mechanism requires a review of the individual
-        event.
+        full archive total. The heat map gives regional weather context for the
+        selected month. Annual cells identify the busiest month or months in
+        that year. Each populated cell links to its latest IEM warning record.
+        Confirm an individual storm’s mechanism from its event evidence.
+      </p>
+      <p class="source-list">
+        <a
+          href="https://www.weather.gov/twc/Monsooninfo"
+          target="_blank"
+          rel="noopener"
+          >NWS monsoon climatology</a
+        >
+        <a
+          href="https://cw3e.ucsd.edu/wp-content/uploads/AR_FAQ%E2%80%99s.pdf"
+          target="_blank"
+          rel="noopener"
+          >CW3E atmospheric river climatology</a
+        >
+        <a
+          href="https://www.weather.gov/media/wrh/online_publications/TAs/TA1601.pdf"
+          target="_blank"
+          rel="noopener"
+          >NWS frontal rainband case</a
+        >
+        <a
+          href="https://www.usgs.gov/publications/rainfall-intensity-duration-control-debris-flows-after-wildfire"
+          target="_blank"
+          rel="noopener"
+          >USGS post-fire rainfall study</a
+        >
       </p>
       <h3>How current is the tracker?</h3>
       <p>
