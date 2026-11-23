@@ -2,7 +2,13 @@ name: Update IEM Burn-Scar FFW Data
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "23,53 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/update-iem-data.yml"
+      - "scripts/**"
+      - "requirements.txt"
   workflow_dispatch:
     inputs:
       backfill:

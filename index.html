@@ -11,9 +11,9 @@
     <title>Western U.S. Burn-Scar Flash Flood Warning Explorer</title>
     <link rel="icon" href="./assets/mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="./styles.css?v=weather4" />
+    <link rel="stylesheet" href="./styles.css?v=map5" />
     <script defer src="./vendor/leaflet/leaflet.js"></script>
-    <script type="module" src="./app.js?v=weather4"></script>
+    <script type="module" src="./app.js?v=map5"></script>
   </head>
   <body>
     <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -206,6 +206,7 @@
             <div
               id="map"
               aria-label="Interactive map of warning footprints and forecast offices"
+              aria-description="Roll the mouse wheel over the map to zoom in or out."
             >
               <noscript
                 >Enable JavaScript to view the interactive map.</noscript
@@ -516,8 +517,10 @@
       </p>
       <h3>What does the map show?</h3>
       <p>
-        Polygons show the initial NWS warning footprint. The legend lets you
-        color them by issuance season or meteorology named in the warning. A
+        Roll the mouse wheel over the map to zoom toward the pointer, or use the
+        + and − buttons. Polygons show the initial NWS warning footprint. The
+        legend lets you color them by issuance season or meteorology named in
+        the warning. A
         burn-scar perimeter may cover a different area. If the initial IEM
         polygon is unavailable, the tracker uses coordinates printed in that
         warning. A text-verified warning with no usable shape still contributes

@@ -3,6 +3,7 @@ import {
   regions,
   seasons,
   seasonForMonth,
+  seasonMapColor,
   tiers,
   tierFor,
   hotspotMinimum,
@@ -13,7 +14,7 @@ import {
   officeRowsForFeatures,
   weatherClass,
   weatherTypes,
-} from "./explorer.mjs?v=weather4";
+} from "./explorer.mjs?v=map5";
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
@@ -195,7 +196,9 @@ function selectBasemap(id, writeUrl = true) {
     'input[name="basemap"][value="' + id + '"]',
   );
   radio.checked = true;
+  const previous = state.basemap;
   state.basemap = id;
+  if (previous !== id && state.color === "season") applyColor();
   if (writeUrl) writePageSettings();
   if (!map) return;
   const [url, attribution, opacity, maxNativeZoom] = sources[id];
@@ -253,7 +256,7 @@ function setupMap() {
     preferCanvas: true,
     zoomSnap: 0.1,
     zoomDelta: 1,
-    scrollWheelZoom: false,
+    scrollWheelZoom: true,
     minZoom: 3,
     maxZoom: 17,
     zoomControl: false,
@@ -450,11 +453,16 @@ function polygonWeather(event) {
 function polygonColor(event) {
   return state.color === "weather"
     ? weatherTypes[polygonWeather(event)].color
-    : seasonForMonth(event.month).color;
+    : seasonMapColor(seasonForMonth(event.month), state.basemap);
 }
-function renderWeatherKey() {
+function renderPolygonLegend() {
   const key = $("weather-key");
   $("color-select").value = state.color;
+  for (const season of seasons)
+    $("season-" + season.id).parentElement.style.setProperty(
+      "--swatch",
+      seasonMapColor(season, state.basemap),
+    );
   $("season-layers").classList.toggle(
     "neutral-season",
     state.color === "weather",
@@ -476,7 +484,7 @@ function renderWeatherKey() {
   }
 }
 function applyColor() {
-  renderWeatherKey();
+  renderPolygonLegend();
   for (const [uid, layer] of mapEvents) {
     const color = polygonColor(state.events.get(uid).properties);
     layer.setStyle({ color, fillColor: color });
@@ -854,7 +862,7 @@ function refreshScope() {
     ).length;
   }
   renderWeatherChoices();
-  renderWeatherKey();
+  renderPolygonLegend();
   applyMapLayers();
   renderTable();
   if (!$("panel-heat").hidden) renderHeat();
@@ -880,7 +888,6 @@ function setupLegend() {
     input.checked = true;
     input.setAttribute("aria-label", "Show " + s.label + " archived polygons");
     label.title = "Toggle " + s.label + " warning polygons";
-    label.style.setProperty("--swatch", s.color);
     label.append(input, el("i"), document.createTextNode(s.label));
     input.addEventListener("change", applyMapLayers);
     $("season-layers").append(label);

@@ -31,7 +31,13 @@ export const regions = [
 ];
 
 export const seasons = [
-  { id: "summer", label: "Jul–Sep", color: "#ffb631", months: [7, 8, 9] },
+  {
+    id: "summer",
+    label: "Jul–Sep",
+    color: "#5cf86c",
+    lightMapColor: "#006e36",
+    months: [7, 8, 9],
+  },
   {
     id: "cool",
     label: "Oct–Mar",
@@ -43,6 +49,11 @@ export const seasons = [
 
 export const seasonForMonth = (month) =>
   seasons.find((s) => s.months.includes(month));
+export function seasonMapColor(season, basemap) {
+  if (basemap === "topo" || basemap === "osm")
+    return season.lightMapColor ?? season.color;
+  return season.color;
+}
 export const hotspotMinimum = 30;
 export const tiers = [
   { min: 101, label: "Extreme", range: ">100", color: "#ff426f", radius: 10 },

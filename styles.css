@@ -251,7 +251,7 @@ h1 span {
 }
 .season-metric em {
   font-style: normal;
-  color: var(--gold);
+  color: #85ee95;
   white-space: nowrap;
 }
 .season-metric em:last-child {
@@ -1093,11 +1093,11 @@ input[type="checkbox"] {
   gap: 7px;
 }
 .season-card {
-  border: 1px solid #795a28;
+  border: 1px solid #356643;
   border-radius: 6px;
   padding: 8px 9px;
-  background: #292319;
-  color: #ffd16f;
+  background: #11291d;
+  color: #85ee95;
 }
 .season-card.cool {
   border-color: #275975;
@@ -1665,8 +1665,8 @@ dialog p {
 .season-leaders button {
   padding: 1px 4px;
   border-radius: 3px;
-  background: #4a381e;
-  color: #ffdb88;
+  background: #1e4830;
+  color: #acf3b6;
   font: 700 0.65rem var(--mono);
 }
 .season-card.cool .season-leaders button {
